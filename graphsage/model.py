@@ -11,7 +11,9 @@ from collections import defaultdict
 
 from graphsage.encoders import Encoder
 from graphsage.aggregators import MeanAggregator
+from graphsage.utils import myfunc,load_data
 
+import pickle
 """
 Simple supervised GraphSAGE model as well as examples running the model
 on the Cora and Pubmed datasets.
@@ -22,19 +24,54 @@ class SupervisedGraphSage(nn.Module):
     def __init__(self, num_classes, enc):
         super(SupervisedGraphSage, self).__init__()
         self.enc = enc
-        self.xent = nn.CrossEntropyLoss()
+        #self.xent = nn.CrossEntropyLoss()
+        self.xent = nn.BCEWithLogitsLoss()
+        self.sig = nn.Sigmoid()
 
         self.weight = nn.Parameter(torch.FloatTensor(num_classes, enc.embed_dim))
         init.xavier_uniform(self.weight)
 
     def forward(self, nodes):
+        #print("encoder",self.enc)
         embeds = self.enc(nodes)
+        #print("embeds",embeds)
         scores = self.weight.mm(embeds)
         return scores.t()
 
     def loss(self, nodes, labels):
         scores = self.forward(nodes)
         return self.xent(scores, labels.squeeze())
+def generate_bias(path):
+    kmeans = pickle.load(open(path, "rb"))
+    centroids=kmeans.cluster_centers_
+    distances={}
+    #print(set(kmeans.labels_))
+    #print(centroids)
+    for i,c1 in enumerate(centroids):
+        for j,c2 in enumerate(centroids):
+            if not (i == j):
+                distances[(i,j)]=np.linalg.norm(c1-c2)*100
+            else:
+                distances[(i,j)]=1
+    feature_labels=kmeans.labels_
+    return feature_labels,distances
+
+def generate_bias_ppi(path1,path2):
+    CModel = pickle.load(open(path1, "rb"))
+    centroids = np.load(path2)
+    distances={}
+    #print(set(kmeans.labels_))
+    #print(centroids)
+    for i,c1 in enumerate(centroids):
+        for j,c2 in enumerate(centroids):
+            if not (i == j):
+                distances[(i,j)]=np.linalg.norm(c1-c2)*1000
+                #distances[(i, j)] = 1000
+            else:
+                distances[(i,j)]=1
+    feature_labels=CModel.labels_
+    feature_labels[feature_labels==-1] = 38
+    return feature_labels,distances
 
 def load_cora():
     num_nodes = 2708
@@ -46,7 +83,7 @@ def load_cora():
     with open("cora/cora.content") as fp:
         for i,line in enumerate(fp):
             info = line.strip().split()
-            feat_data[i,:] = map(float, info[1:-1])
+            feat_data[i,:] = list(map(float, info[1:-1]))
             node_map[info[0]] = i
             if not info[-1] in label_map:
                 label_map[info[-1]] = len(label_map)
@@ -70,16 +107,21 @@ def run_cora():
     features = nn.Embedding(2708, 1433)
     features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
    # features.cuda()
-
-    agg1 = MeanAggregator(features, cuda=True)
-    enc1 = Encoder(features, 1433, 128, adj_lists, agg1, gcn=True, cuda=False)
-    agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False)
+    ## My Changes
+    feature_labels,distance=generate_bias('/home/thummala/graphsage-pytorch/graphsage/corakmeans_3.pkl')
+    n1=10
+    n2=10
+    agg1 = MeanAggregator(features, cuda=True,feature_labels=feature_labels, distance=distance)
+    enc1 = Encoder(features, 1433, 128, adj_lists, agg1, gcn=False, cuda=False, feature_labels=feature_labels, distance=distance,num_sample=n1)
+    #print(enc1(nodes).numpy().shape)
+    agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False,feature_labels=feature_labels, distance=distance)
     enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,
-            base_model=enc1, gcn=True, cuda=False)
-    enc1.num_samples = 5
-    enc2.num_samples = 5
+            base_model=enc1, gcn=False, cuda=False,feature_labels=feature_labels, distance=distance,num_sample=n2)
+    #enc1.num_samples = 0
+    #enc2.num_samples = 0
 
     graphsage = SupervisedGraphSage(7, enc2)
+    #graphsage = SupervisedGraphSage(7, enc1)
 #    graphsage.cuda()
     rand_indices = np.random.permutation(num_nodes)
     test = rand_indices[:1000]
@@ -93,17 +135,21 @@ def run_cora():
         random.shuffle(train)
         start_time = time.time()
         optimizer.zero_grad()
-        loss = graphsage.loss(batch_nodes, 
+        loss = graphsage.loss(batch_nodes,
                 Variable(torch.LongTensor(labels[np.array(batch_nodes)])))
         loss.backward()
         optimizer.step()
         end_time = time.time()
         times.append(end_time-start_time)
-        print batch, loss.data[0]
-
-    val_output = graphsage.forward(val) 
-    print "Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro")
-    print "Average batch time:", np.mean(times)
+        print(batch, loss.data)
+    # #
+    #print("node is",val[:1])
+    #print("adjacency list is",adj_lists[int(val[:1])])
+    val_output = graphsage.forward(val)
+    test_output = graphsage.forward(test)
+    print("Validation F1:",f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro"))
+    print("Average batch time:"+ str(np.mean(times)))
+    print("test F1: ", f1_score(labels[test], test_output.data.numpy().argmax(axis=1), average="micro"))
 
 def load_pubmed():
     #hardcoded for simplicity...
@@ -171,11 +217,81 @@ def run_pubmed():
         optimizer.step()
         end_time = time.time()
         times.append(end_time-start_time)
-        print batch, loss.data[0]
+        print(batch, loss.data)
 
-    val_output = graphsage.forward(val) 
-    print "Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro")
-    print "Average batch time:", np.mean(times)
+    val_output = graphsage.forward(val)
+    test_output=graphsage.forward(test)
+    print("Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro"))
+    print("Average batch time:", np.mean(times))
+    print("test F1: ",f1_score(labels[test],test_output.data.numpy().argmax(axis=1),average="micro"))
+def ppi():
+    np.random.seed(1)
+    random.seed(1)
+    feat_data, labels, adj_lists,train,test,val = myfunc()
+    num_nodes = labels.shape[0]
+    features = nn.Embedding(num_nodes, 50)
+    features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
+   # features.cuda()
+    ## My Changes
+    feature_labels,distance=generate_bias_ppi('/home/thummala/graphsage-pytorch/graphsage/ppi_given.pkl','/home/thummala/graphsage-pytorch/graphsage/ppi-centroids.npy')
+    n1=25
+    n2=5
+    agg1 = MeanAggregator(features, cuda=True,feature_labels=feature_labels, distance=distance)
+    enc1 = Encoder(features, 50, 128, adj_lists, agg1, gcn=False, cuda=False, feature_labels=feature_labels, distance=distance,num_sample=n1)
+    #print(enc1(nodes).numpy().shape)
+    agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False,feature_labels=feature_labels, distance=distance)
+    enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,
+            base_model=enc1, gcn=False, cuda=False,feature_labels=feature_labels, distance=distance,num_sample=n2)
+    #enc1.num_samples = 0
+    #enc2.num_samples = 0
+
+    graphsage = SupervisedGraphSage(121, enc2)
+    #graphsage = SupervisedGraphSage(7, enc1)
+#    graphsage.cuda()
+#     rand_indices = np.random.permutation(num_nodes)
+#     test = rand_indices[:1000]
+#     val = rand_indices[1000:1500]
+#     train = list(rand_indices[1500:])
+
+    optimizer = torch.optim.Adam(filter(lambda p : p.requires_grad, graphsage.parameters()), lr=0.01)
+    times = []
+    batch_size=256
+    for epoch in range(5):
+        random.shuffle(train)
+        for batch in range(1,len(train)//batch_size):
+            batch_nodes = train[(batch-1)*batch_size:batch*batch_size]
+            #random.shuffle(train)
+            start_time = time.time()
+            optimizer.zero_grad()
+            loss = graphsage.loss(batch_nodes,
+                    Variable(torch.from_numpy(labels[np.array(batch_nodes)]).to(torch.float32)))
+            loss.backward()
+            optimizer.step()
+            end_time = time.time()
+            times.append(end_time-start_time)
+            print(batch, loss.data)
+    # #
+    #print("node is",val[:1])
+    #print("adjacency list is",adj_lists[int(val[:1])])
+    #test1=graphsage.forward(test)
+    #print("test",test1)
+    val_output = graphsage.forward(val)
+    test_output = graphsage.forward(test)
+    print("Validation F1:",F1_score(labels[val], torch.sigmoid(val_output).data.numpy()))
+    print("Average batch time:"+ str(np.mean(times)))
+    print("test F1: ", F1_score(labels[test], torch.sigmoid(test_output).data.numpy()))
+def F1_score(y_true, y_pred):
+    y_pred[y_pred > 0.5] = 1
+    y_pred[y_pred <= 0.5] = 0
+    return f1_score(y_true, y_pred, average="micro")
 
 if __name__ == "__main__":
-    run_cora()
+    #run_cora()
+    #run_pubmed()
+    # feature,labels,adj_lists=load_cora()
+    # print(feature.shape)
+    # print(labels.shape)
+    # print(len(list(adj_lists.keys())))
+    # print(feature[0])
+    # print(labels[0])
+    ppi()

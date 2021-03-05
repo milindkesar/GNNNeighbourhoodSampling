@@ -10,10 +10,11 @@ class Encoder(nn.Module):
     def __init__(self, features, feature_dim, 
             embed_dim, adj_lists, aggregator,
             num_sample=10,
-            base_model=None, gcn=False, cuda=False, 
+            base_model=None, gcn=False, cuda=False,feature_labels=None,distance=None,
             feature_transform=False): 
         super(Encoder, self).__init__()
-
+        self.feature_labels=feature_labels
+        self.distance=distance
         self.features = features
         self.feat_dim = feature_dim
         self.adj_lists = adj_lists
@@ -36,8 +37,11 @@ class Encoder(nn.Module):
 
         nodes     -- list of nodes
         """
+        #print("In encoders" +str(self.adj_lists[4]))
         neigh_feats = self.aggregator.forward(nodes, [self.adj_lists[int(node)] for node in nodes], 
                 self.num_sample)
+        #print("neigh_feats",neigh_feats)
+
         if not self.gcn:
             if self.cuda:
                 self_feats = self.features(torch.LongTensor(nodes).cuda())
@@ -46,5 +50,7 @@ class Encoder(nn.Module):
             combined = torch.cat([self_feats, neigh_feats], dim=1)
         else:
             combined = neigh_feats
+        #print("shape combinded before:", combined.t().shape)
         combined = F.relu(self.weight.mm(combined.t()))
+        #print("shape combinded:" ,combined)
         return combined
