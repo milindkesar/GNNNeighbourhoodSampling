@@ -40,7 +40,7 @@ class Encoder(nn.Module):
         #print("In encoders" +str(self.adj_lists[4]))
         neigh_feats = self.aggregator.forward(nodes, [self.adj_lists[int(node)] for node in nodes], 
                 self.num_sample)
-        #print("neigh_feats",neigh_feats)
+        #print("neigh_feats",torch.isnan(neigh_feats).any())
 
         if not self.gcn:
             if self.cuda:
@@ -52,5 +52,6 @@ class Encoder(nn.Module):
             combined = neigh_feats
         #print("shape combinded before:", combined.t().shape)
         combined = F.relu(self.weight.mm(combined.t()))
-        #print("shape combinded:" ,combined)
+        #print("self.weight",torch.isnan(self.weight).any())
+        #print("shape combinded:" ,torch.isnan(combined).any())
         return combined
