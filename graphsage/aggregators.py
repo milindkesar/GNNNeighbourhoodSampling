@@ -10,7 +10,7 @@ import torch.nn.functional as F
 Set of modules for aggregating embeddings of neighbors.
 """
 class Aggregator1(nn.Module):
-    def __init__(self, features, cuda=False, gcn=False,feature_labels=None,distance=None, freq= None,spectral=None,dist_btwn=None, adj_list=None):
+    def __init__(self, features, cuda=False, gcn=False,feature_labels=None,distance=None, freq= None,spectral=None,dist_btwn=None, adj_list=None,attention='normal',addnodefeats='no',layerno=1):
         """
         Initializes the aggregator for a specific graph.
 
@@ -24,18 +24,29 @@ class Aggregator1(nn.Module):
         self.features = features
         self.cuda = cuda
         self.gcn = gcn
-
+        self.layerno = layerno
         self.feature_labels = feature_labels
         self.distance=distance
         self.freq = freq
         self.adj_list = adj_list
         self.dist_btwn = dist_btwn
         self.spectral = spectral
-
-        self.weight = nn.Parameter(torch.FloatTensor(1,4))
-        self.weight1 = nn.Parameter(torch.FloatTensor(512,4))
+        self.attention =attention
+        self.addnodefeats=addnodefeats
+        self.no_feats=50
+        if addnodefeats == 'yes':
+            if self.layerno == 1:
+                self.no_feats=50
+                self.weight1 = nn.Parameter(torch.FloatTensor(512,4+2*50))
+            else:
+                self.no_feats=128
+                self.weight1 = nn.Parameter(torch.FloatTensor(512,4+2*128))
+        else:
+            self.weight1 = nn.Parameter(torch.FloatTensor(512,4))
+        self.bias1 = nn.Parameter(torch.zeros(512,1))
+        self.bias2 = nn.Parameter(torch.zeros(1,1))
+        #self.weight1 = nn.Parameter(torch.FloatTensor(512,4))
         self.weight2 = nn.Parameter(torch.FloatTensor(1,512))
-        init.xavier_uniform(self.weight)
         init.xavier_uniform(self.weight1)
         init.xavier_uniform(self.weight2)
     def forward(self, nodes, to_neighs, num_sample=10):
@@ -54,15 +65,20 @@ class Aggregator1(nn.Module):
             else:
                 pass
             #print(node1,node2)
-            # freq=self.freq[node1][node2]
-            # dist = self.dist_btwn[node1][node2]
-            # dist_cs = self.distance[(self.feature_labels[node1],self.feature_labels[node2])]
-            #spectral = self.spectral[node2]
+            freq=self.freq[node1][node2]
+            dist = self.dist_btwn[node1][node2]
+            dist_cs = self.distance[(self.feature_labels[node1],self.feature_labels[node2])]
+            spectral = self.spectral[3][node2]
             #print(self.spectral)
-            # summary_t = torch.FloatTensor([freq,dist,dist_cs,spectral]).reshape(4,1)
-            summary_t=torch.FloatTensor([self.spectral[0][node2],self.spectral[1][node2],self.spectral[2][node2],self.spectral[3][node2]]).reshape(4,1)
-            temp_o=torch.sigmoid(torch.mm(self.weight1,summary_t))
-            temp_1 = torch.sigmoid(torch.mm(self.weight2,temp_o))
+            if self.addnodefeats == 'yes':
+                feat_len = self.no_feats
+                summary_t = torch.FloatTensor([freq,dist,dist_cs,spectral])
+                summary_t=torch.cat((summary_t,self.features(torch.LongTensor([node1])).reshape(feat_len,1).squeeze(),self.features(torch.LongTensor([node2])).reshape(feat_len,1).squeeze()),0).reshape(4+2*feat_len,1)
+            else:
+                summary_t = torch.FloatTensor([freq,dist,dist_cs,spectral]).reshape(4,1)
+            #summary_t=torch.FloatTensor([self.spectral[0][node2],self.spectral[1][node2],self.spectral[2][node2],self.spectral[3][node2]]).reshape(4,1)
+            temp_o=torch.sigmoid(torch.mm(self.weight1,summary_t)+self.bias1)
+            temp_1 = torch.sigmoid(torch.mm(self.weight2,temp_o)+self.bias2)
             return temp_1
         _set = set
         if not num_sample is None:
@@ -106,6 +122,10 @@ class Aggregator1(nn.Module):
                 # else:
                 #     count4+=1
         # print(count1,count2,count3,count4)
+        if self.attention == 'softmax':
+            importance = F.softmax(importance, dim=1)
+        if torch.isnan(importance).any():
+            importance[importance != importance] = 0
         mask*=importance
         if self.cuda:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list).cuda())

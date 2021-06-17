@@ -52,6 +52,5 @@ class Encoder(nn.Module):
             combined = neigh_feats
         #print("shape combinded before:", combined.t().shape)
         combined = F.relu(self.weight.mm(combined.t()))
-        #print("self.weight",torch.isnan(self.weight).any())
-        #print("shape combinded:" ,torch.isnan(combined).any())
+
         return combined

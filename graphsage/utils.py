@@ -39,7 +39,7 @@ def load_data(prefix, normalize=True, load_walks=False):
     ## (necessary because of networkx weirdness with the Reddit data)
     broken_count = 0
     for node in G.nodes():
-        if not 'val' in G.node[node] or not 'test' in G.node[node]:
+        if not 'val' in G.nodes[node] or not 'test' in G.nodes[node]:
             G.remove_node(node)
             broken_count += 1
     print("Removed {:d} nodes that lacked proper annotations due to networkx versioning issues".format(broken_count))
@@ -48,15 +48,15 @@ def load_data(prefix, normalize=True, load_walks=False):
     ## (some datasets might already have this..)
     print("Loaded data.. now preprocessing..")
     for edge in G.edges():
-        if (G.node[edge[0]]['val'] or G.node[edge[1]]['val'] or
-                G.node[edge[0]]['test'] or G.node[edge[1]]['test']):
+        if (G.nodes[edge[0]]['val'] or G.nodes[edge[1]]['val'] or
+                G.nodes[edge[0]]['test'] or G.nodes[edge[1]]['test']):
             G[edge[0]][edge[1]]['train_removed'] = True
         else:
             G[edge[0]][edge[1]]['train_removed'] = False
 
     if normalize and not feats is None:
         from sklearn.preprocessing import StandardScaler
-        train_ids = np.array([id_map[n] for n in G.nodes() if not G.node[n]['val'] and not G.node[n]['test']])
+        train_ids = np.array([id_map[str(n)] for n in G.nodes() if not G.nodes[n]['val'] and not G.nodes[n]['test']])
         train_feats = feats[train_ids]
         scaler = StandardScaler()
         scaler.fit(train_feats)
@@ -78,9 +78,9 @@ def myfunc(type='train'):
     for edge in G.edges():
         adj_lists[edge[0]].add(edge[1])
         adj_lists[edge[1]].add(edge[0])
-    labels = np.empty((num_nodes, len(class_map[0])), dtype=np.int64)
+    labels = np.empty((num_nodes, len(class_map['0'])), dtype=np.int64)
     for i in G.nodes():
-        labels[id_map[i]] = class_map[id_map[i]]
+        labels[id_map[str(i)]] = class_map[str(id_map[str(i)])]
     for node in G.nodes(data=True):
         if node[1]['test']==False and node[1]['val']==False:
             train.append(node[0])
