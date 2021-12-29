@@ -1,0 +1,11 @@
+python -m graphsage.main --dataset wikics --epochs 100 --rand_walk True --neighbours1 60 --neighbours2 60 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/wikics_ftrw_6060_mean_1010_1_1_0.2 --n_layers 2 --includenodefeats no --typewalk customfeatureteleport --p 1 --q 1 --num_walks 10 --walk_length 10 --teleport 0.2
+
+python -m graphsage.main --dataset wikics --epochs 100 --rand_walk True --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/wikics_ftrw_2020_mean_1010_1_1_0.2 --n_layers 2 --includenodefeats no --typewalk customfeatureteleport --p 1 --q 1 --num_walks 10 --walk_length 10 --teleport 0.2
+
+python -m graphsage.main --dataset wikics --epochs 100 --rand_walk True --neighbours1 60 --neighbours2 60 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/wikics_ftrw_6060_mean_1010_1_1_0.3 --n_layers 2 --includenodefeats no --typewalk customfeatureteleport --p 1 --q 1 --num_walks 10 --walk_length 10 --teleport 0.3
+
+python -m graphsage.main --dataset wikics --epochs 100 --rand_walk True --neighbours1 60 --neighbours2 60 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/wikics_ftrw_6060_mean_1010_1_1_0.4 --n_layers 2 --includenodefeats no --typewalk customfeatureteleport --p 1 --q 1 --num_walks 10 --walk_length 10 --teleport 0.4
+
+python -m graphsage.main --dataset wikics --epochs 100 --rand_walk True --neighbours1 60 --neighbours2 60 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/wikics_ftrw_6060_mean_1010_1_1_0.5 --n_layers 2 --includenodefeats no --typewalk customfeatureteleport --p 1 --q 1 --num_walks 10 --walk_length 10 --teleport 0.5
+
+python -m graphsage.main --dataset wikics --epochs 100 --rand_walk True --neighbours1 60 --neighbours2 60 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/wikics_ftrw_6060_mean_1010_1_1_0.6 --n_layers 2 --includenodefeats no --typewalk customfeatureteleport --p 1 --q 1 --num_walks 10 --walk_length 10 --teleport 0.6

@@ -105,6 +105,9 @@ ENV/
 # Rope project settings
 .ropeproject
 
+# Custom
+res/
+
 *.pickle
 *.pkl
 
