@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import random
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score,accuracy_score
 from collections import defaultdict
 import os
 from graphsage.encoders import Encoder
@@ -42,6 +42,10 @@ class SupervisedGraphSage(nn.Module):
         else:
             scores = self.forward(nodes)
             return self.xent(scores, labels.squeeze())
+
+    def returnembedding(self,nodes):
+        embeds = self.enc(nodes)
+        return embeds
 def generate_bias(path):
     kmeans = pickle.load(open(path, "rb"))
     centroids=kmeans.cluster_centers_
@@ -361,19 +365,21 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
     test_output = model.forward(test)
     if classification == 'normal':
         test_f1 = f1_score(labels[test], test_output.data.numpy().argmax(axis=1), average="micro")
+        test_f1_macro = f1_score(labels[test], test_output.data.numpy().argmax(axis=1), average="macro")
     elif classification == 'multi_label':
         test_f1 = F1_score(labels[test], torch.sigmoid(test_output).data.numpy())
     results['epoch']=epoch
-    results['test_f1']=test_f1
+    results['test_f1_micro']=test_f1
+    results['test_f1_macro']=test_f1_macro
     with open(out_dir+'/test.txt','a+') as out:
         out.write(json.dumps(results)+'\n')
 
 
-def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no"):
+def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2):
     classification='normal'
     print("random walk",rw)
     if name == 'wikics':
-        feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw)
+        feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
         feat_data=np.array(feat_data)
         labels = np.array(labels)
     if name == 'ppi':
@@ -424,10 +430,13 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         out_dir=out_dir+'/'+str(k)
         os.makedirs(out_dir, exist_ok=True)
         try:
-            print('using custom splits...')
+            print('using given splits...')
             test = np.array([i for i, x in enumerate(test_mask) if x])
             val = np.array([i for i, x in enumerate(val_mask) if x])
             train = np.array([i for i, x in enumerate(train_mask) if x])
+            print('test',test.shape)
+            print('val',val.shape)
+            print('train',train.shape)
         except:
             print('using random splits...')
             rand_indices = np.random.permutation(num_nodes)
@@ -437,6 +446,7 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, graphsage.parameters()), lr=lr)
         times = []
         labels=np.array(labels)
+        n_passes = len(train)/256
         # writer = SummaryWriter(log_dir=out_dir)
         for epoch in range(epochs):
             batch_nodes = train[:256]
@@ -465,7 +475,13 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
                 print(epoch, " training loss: " +str(loss.data) + "  Validation Loss: "+str(val_loss.data))
             if epoch%50 == 0 or epoch == epochs-1:
                 evaluate(graphsage,test, out_dir,labels,epoch,classification)
-    construct_agg(outdir)
+    test_output = graphsage.forward(test)
+    predicted_scores=test_output.data.numpy().argmax(axis=1)
+    #print(predicted_scores)
+    np.save('/home/thummala/graphsage-pytorch/res/wikics_khopteleport_dfactor2/predictions.npy', predicted_scores)
+    embeds = graphsage.returnembedding(test).detach().t().numpy()
+    np.save('/home/thummala/graphsage-pytorch/res/wikics_khopteleport_dfactor2/embeddings.npy', embeds)
+    #construct_agg(outdir)
         # val_output = graphsage.forward(val)
         # test_output = graphsage.forward(test)
         # valid_f1 = f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro")

@@ -36,8 +36,8 @@ class Aggregator1(nn.Module):
         self.no_feats=50
         if addnodefeats == 'yes':
             if self.layerno == 1:
-                self.no_feats=50
-                self.weight1 = nn.Parameter(torch.FloatTensor(512,4+2*50))
+                self.no_feats=300
+                self.weight1 = nn.Parameter(torch.FloatTensor(512,4+2*300))
             else:
                 self.no_feats=128
                 self.weight1 = nn.Parameter(torch.FloatTensor(512,4+2*128))
