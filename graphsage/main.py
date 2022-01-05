@@ -1,4 +1,4 @@
-from graphsage.model import run_wiki_cs,run_general
+from graphsage.model import run_general
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset",type=str)

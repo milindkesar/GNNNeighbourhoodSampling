@@ -14,6 +14,7 @@ from graphsage.walkshelper import generate_walks
 import random
 from graphsage.lsh import train_lsh,get_nearest_neighbors
 
+## Helper function for calculating F1 Score
 def F1_score(y_true, y_pred):
     y_pred[y_pred > 0.5] = 1
     y_pred[y_pred <= 0.5] = 0
@@ -22,12 +23,15 @@ def F1_score(y_true, y_pred):
     #     sum+= f1_score(y_true[:,i],y_pred[:,i],average="micro")
     return f1_score(y_true, y_pred, average="micro")
 
+## Helper function to get length of masks
 def count_train_test_val(myarr):
     count=0
     for item in myarr:
         if item == True:
             count+=1
     return count
+
+## Helper function to plot degree distribution from adjacency list represented as node-->neighbourlist
 def adj_dis_plot(adj_list):
     sum=0
     max=0
@@ -45,6 +49,8 @@ def adj_dis_plot(adj_list):
     print('min',min)
     sns.distplot(myarr)
     plt.show()
+
+## Helper function to calculate and write aggregated results if multiple iterations
 def construct_agg(dir=None):
     try:
         os.makedirs(dir+'/agg')
@@ -225,269 +231,187 @@ def custom_load_cora2():
 
 
     return feat_data, labels, adj_lists2,dist_in_graph,freq,feature_labels, distances,degrees
-# def load_wikics(random_walk=False,type_walk='default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2,workers=1):
-#     #function to format neighbours in random walk dic stored as string
-#     print("Loading WikiCS")
-#     def format_dic(mystring):
-#         mystring=mystring.replace('{','')
-#         mystring=mystring.replace('}','')
-#         myarr=mystring.split(',')
-#         if myarr==['set()']:
-#             return set()
-#         myarr=[int(x) for x in myarr]
-#         return set(myarr)
-#     #function to format frequency and distance in graph etc
-#     def format_dic2(mystring):
-#         mystring=mystring.replace('{','')
-#         mystring=mystring.replace('}','')
-#         myarr=mystring.split(',')
-#         res={}
-#         if myarr==['']:
-#             return res
-#         for item in myarr:
-#             els=item.split(':')
-#             try:
-#                 res[int(els[0].replace("'",''))]=int(els[1])
-#             except:
-#                 res[int(els[0])] = int(els[1])
-#         return res
-#     def generate_bias(centroids):
-#         distances = {}
-#         for i, c1 in enumerate(centroids):
-#             for j, c2 in enumerate(centroids):
-#                 if not (i == j):
-#                     distances[(i, j)] = np.linalg.norm(c1 - c2)*100
-#                 else:
-#                     distances[(i, j)] = 1
-#         return distances
-#
-#     root_folder='/home/thummala/graph-datasets/Dataset-WikiCS'
-#     with open(root_folder+"/data.json", "r") as file:
-#         wikics = json.load(file)
-#     if type_walk=='default':
-#         print('Loading normal random walks')
-#         node_df = pd.read_csv(root_folder+'/wikics_nodeinfo.csv')
-#     elif type_walk=='clusterteleport':
-#         print('Loading cluster teleport walks')
-#         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_clusterrw.csv')
-#     elif type_walk=='featureteleport':
-#         print('Loading feature teleport walks')
-#         node_df=pd.read_csv(root_folder+'/wikics_nodeinfo_featureteleportrw.csv')
-#     elif type_walk=='customfeatureteleport':
-#         print('generating walks with parameters specified: p='+str(p)+' q='+str(q)+ ' walklength='+str(walk_length) + ' num_walks='+str(num_walks)+' teleport='+str(teleport))
-#         node_df = generate_walks(data2=wikics,p=p,q=q,num_walks=num_walks,walklength=walk_length,cluster_teleport=teleport,root_folder='/home/thummala/graph-datasets/Dataset-WikiCS',workers=workers)
-#     else:
-#         print('Specify correct type:- default, clusterteleport or featureteleport-->loading default now')
-#         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
-#     feat_data=wikics['features']
-#     labels=wikics['labels']
-#     train_mask,val_mask,test_mask=wikics['train_masks'][10],wikics['val_masks'][10],wikics['test_mask']
-#     centroids=np.load(root_folder+'/centroids_14.npy')
-#     distances = generate_bias(centroids)
-#     feature_labels = node_df['cluster_labels']
-#     if random_walk:
-#         print('loading random walk samples')
-#         adj_list={}
-#         freq={}
-#         dist_in_graph={}
-#         centralityev=[0]*len(train_mask)
-#         centralityd = [0] * len(train_mask)
-#         centralitybtw = [0] * len(train_mask)
-#         centralityh = [0] * len(train_mask)
-#         for i,row in node_df.iterrows():
-#             node=int(row['nodes'])
-#             adj_list[node]=format_dic(row['randomwalkneigh'])
-#             freq[node]=format_dic2(row['freq_in_randomwalk'])
-#             dist_in_graph[node]=format_dic2(row['dist_in_graph'])
-#             centralityev[node]=row['eigenvectorc']
-#             centralitybtw[node]=row['betweennessc']
-#             centralityd[node]=row['degreec']
-#             centralityh[node]=row['harmonicc']
-#     if not random_walk:
-#         adj_list={}
-#         freq={}
-#         dist_in_graph={}
-#         centralityev=[0]*len(train_mask)
-#         centralityh=[0]*len(train_mask)
-#         centralitybtw=[0]*len(train_mask)
-#         centralityd=[0]*len(train_mask)
-#         for i,row in node_df.iterrows():
-#             node=int(row['nodes'])
-#             adj_list[node]=set(wikics['links'][node])
-#             # ## Remove this later
-#             # if len(adj_list[node]) <= 2:
-#             #     adj_list[node]=format_dic(row['randomwalkneigh'])
-#             # ##
-#             centralityev[node]=row['eigenvectorc']
-#             centralitybtw[node]=row['betweennessc']
-#             centralityd[node]=row['degreec']
-#             centralityh[node]=row['harmonicc']
-#         for key in adj_list.keys():
-#             unique = {}
-#             unique2 = {}
-#             for item in adj_list[key]:
-#                 unique[int(item)] = 1
-#                 unique2[int(item)] = 1
-#             freq[int(key)] = unique
-#             dist_in_graph[int(key)] = unique2
-#     return feat_data,labels,adj_list,train_mask,test_mask,val_mask,distances,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd
-def load_wikics(random_walk=False,type_walk='default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2,workers=1, teleport_khop=False, dfactor=2):
-    #function to format neighbours in random walk dic stored as string
+
+## Loader for wikics
+def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, walk_length=10, teleport=0.2, workers=1,
+                teleport_khop=False, dfactor=2, use_centroid=False):
+    # function to format neighbours in random walk dic stored as string
     print("Loading WikiCS")
+    wikics_loader_dic = {}
+
     def format_dic(mystring):
-        mystring=mystring.replace('{','')
-        mystring=mystring.replace('}','')
-        myarr=mystring.split(',')
-        if myarr==['set()']:
+        mystring = mystring.replace('{', '')
+        mystring = mystring.replace('}', '')
+        myarr = mystring.split(',')
+        if myarr == ['set()']:
             return set()
-        myarr=[int(x) for x in myarr]
+        myarr = [int(x) for x in myarr]
         return set(myarr)
-    #function to format frequency and distance in graph etc
+
+    # function to format frequency and distance in graph etc
     def format_dic2(mystring):
-        mystring=mystring.replace('{','')
-        mystring=mystring.replace('}','')
-        myarr=mystring.split(',')
-        res={}
-        if myarr==['']:
+        mystring = mystring.replace('{', '')
+        mystring = mystring.replace('}', '')
+        myarr = mystring.split(',')
+        res = {}
+        if myarr == ['']:
             return res
         for item in myarr:
-            els=item.split(':')
+            els = item.split(':')
             try:
-                res[int(els[0].replace("'",''))]=int(els[1])
+                res[int(els[0].replace("'", ''))] = int(els[1])
             except:
                 res[int(els[0])] = int(els[1])
         return res
+
+    # function to generate distances in centroids (can be edited for different distances)
     def generate_bias(centroids):
         distances = {}
         for i, c1 in enumerate(centroids):
             for j, c2 in enumerate(centroids):
                 if not (i == j):
-                    distances[(i, j)] = np.linalg.norm(c1 - c2)*100
+                    distances[(i, j)] = np.linalg.norm(c1 - c2) * 100
                 else:
                     distances[(i, j)] = 1
         return distances
+
+    # function to return candidate nodes based on lsh
     def return_lsh_candidates(features, n_vectors=16):
         model = train_lsh(features, n_vectors, seed=143)
-        temp={}
+        temp = {}
         for item_id in range(features.shape[0]):
-            temp[item_id]={}
+            temp[item_id] = {}
             query_vector = features[item_id]
             nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=2)
             if len(nearest_neighbors) < 20:
                 radius = 3
                 while True:
-                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=radius)
+                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model,
+                                                              max_search_radius=radius)
                     if len(nearest_neighbors) > 20:
                         break
                     radius = radius + 1
-            for i,row in nearest_neighbors[:20].iterrows():
+            for i, row in nearest_neighbors[:20].iterrows():
                 temp[item_id][int(row['id'])] = row['similarity']
         return temp
+
+    # helper function
     def flip(p):
         return True if random.random() < p else False
-    root_folder='/home/thummala/graph-datasets/Dataset-WikiCS'
-    with open(root_folder+"/data.json", "r") as file:
+
+    ##Root Folder
+    root_folder = '/home/thummala/graphsage-pytorch/datasets/Dataset-WikiCS'
+
+    ##Loading the Data
+    with open(root_folder + "/data.json", "r") as file:
         wikics = json.load(file)
     print('loading dataframe of')
-    if type_walk=='default':
+    if type_walk == 'default':
         print('Loading normal random walks')
-        node_df = pd.read_csv(root_folder+'/wikics_nodeinfo.csv')
-    elif type_walk=='clusterteleport':
+        try:
+            node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
+        except:
+            node_df = generate_walks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
+                                     cluster_teleport=teleport, root_folder=root_folder, workers=workers)
+    elif type_walk == 'clusterteleport':
         print('Loading cluster teleport walks')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_clusterrw.csv')
-    elif type_walk=='featureteleport':
+    elif type_walk == 'featureteleport':
         print('Loading feature teleport walks')
-        node_df=pd.read_csv(root_folder+'/wikics_nodeinfo_featureteleportrw.csv')
-    elif type_walk=='customfeatureteleport':
-        print('generating walks with parameters specified: p='+str(p)+' q='+str(q)+ ' walklength='+str(walk_length) + ' num_walks='+str(num_walks)+' teleport='+str(teleport))
-        node_df = generate_walks(data2=wikics,p=p,q=q,num_walks=num_walks,walklength=walk_length,cluster_teleport=teleport,root_folder='/home/thummala/graph-datasets/Dataset-WikiCS',workers=workers)
+        node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_featureteleportrw.csv')
+    elif type_walk == 'customfeatureteleport':
+        print('generating walks with parameters specified: p=' + str(p) + ' q=' + str(q) + ' walklength=' + str(
+            walk_length) + ' num_walks=' + str(num_walks) + ' teleport=' + str(teleport))
+        node_df = generate_walks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
+                                 cluster_teleport=teleport, root_folder=root_folder, workers=workers)
     else:
         print('Specify correct type:- default, clusterteleport or featureteleport-->loading default now')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
-    feat_data=wikics['features']
-    labels=wikics['labels']
-    train_mask,val_mask,test_mask=wikics['train_masks'][10],wikics['val_masks'][10],wikics['test_mask']
-    centroids=np.load(root_folder+'/centroids_14.npy')
-    distances = generate_bias(centroids)
-    feature_labels = node_df['cluster_labels']
+    feat_data = wikics['features']
+    labels = wikics['labels']
+    train_mask, val_mask, test_mask = wikics['train_masks'][10], wikics['val_masks'][10], wikics['test_mask']
+    centralityev = [0] * len(train_mask)
+    centralityd = [0] * len(train_mask)
+    centralitybtw = [0] * len(train_mask)
+    centralityh = [0] * len(train_mask)
+    adj_list = {}
+    freq = {}
+    dist_in_graph = {}
+    if use_centroid:
+        centroids = np.load(root_folder + '/centroids_14.npy')
+        distances = generate_bias(centroids)
+        cluster_labels = node_df['cluster_labels']
+    else:
+        centroids = []
+        cluster_labels = []
+        distances = []
     if random_walk:
         print('loading random walk samples')
-        adj_list={}
-        freq={}
-        dist_in_graph={}
-        centralityev=[0]*len(train_mask)
-        centralityd = [0] * len(train_mask)
-        centralitybtw = [0] * len(train_mask)
-        centralityh = [0] * len(train_mask)
-        for i,row in node_df.iterrows():
-            node=int(row['nodes'])
-            adj_list[node]=format_dic(row['randomwalkneigh'])
-            freq[node]=format_dic2(row['freq_in_randomwalk'])
-            dist_in_graph[node]=format_dic2(row['dist_in_graph'])
-            centralityev[node]=row['eigenvectorc']
-            centralitybtw[node]=row['betweennessc']
-            centralityd[node]=row['degreec']
-            centralityh[node]=row['harmonicc']
+        for i, row in node_df.iterrows():
+            node = int(row['nodes'])
+            adj_list[node] = format_dic(row['randomwalkneigh'])
+            freq[node] = format_dic2(row['freq_in_randomwalk'])
+            dist_in_graph[node] = format_dic2(row['dist_in_graph'])
+            centralityev[node] = row['eigenvectorc']
+            centralitybtw[node] = row['betweennessc']
+            centralityd[node] = row['degreec']
+            centralityh[node] = row['harmonicc']
     if not random_walk:
         print('loading khop neighbours')
         teleport_count=0
-        adj_list={}
-        freq={}
-        dist_in_graph={}
-        centralityev=[0]*len(train_mask)
-        centralityh=[0]*len(train_mask)
-        centralitybtw=[0]*len(train_mask)
-        centralityd=[0]*len(train_mask)
         if teleport_khop:
             print('creating lsh')
             lsh_cand_dic = return_lsh_candidates(np.array(feat_data))
             print('done')
-            print('dfactor',dfactor)
-        for i,row in node_df.iterrows():
-            node=int(row['nodes'])
+            print('dfactor', dfactor)
+        for i, row in node_df.iterrows():
+            node = int(row['nodes'])
             if teleport_khop:
                 if len(set(wikics['links'][node])) < 10:
                     if len(set(wikics['links'][node])) == 0:
-                        tel_prob=1
+                        tel_prob = 1
                     else:
-                        tel_prob=1/(dfactor*len(set(wikics['links'][node])))
+                        tel_prob = 1 / (dfactor * len(set(wikics['links'][node])))
                     if flip(tel_prob):
                         t = list(lsh_cand_dic[node].values())
                         if sum(t) == 0:
-                            print('problem encountered at node ', node, ' lsh returned zero similarity with candidate nodes')
-                            adj_list[node]=set(wikics['links'][node])
-                            print('the adjacency list of problem node is ',adj_list[node])
+                            print('problem encountered at node ', node,
+                                  ' lsh returned zero similarity with candidate nodes')
+                            adj_list[node] = set(wikics['links'][node])
+                            print('the adjacency list of problem node is ', adj_list[node])
                         else:
-                            teleport_count+=1
-                            prob_weights = list(t/sum(t))
-                            jump_node = np.random.choice(list(lsh_cand_dic[node].keys()),p=prob_weights)
-                            adj_list[node]=set(wikics['links'][jump_node])
+                            teleport_count += 1
+                            prob_weights = list(t / sum(t))
+                            jump_node = np.random.choice(list(lsh_cand_dic[node].keys()), p=prob_weights)
+                            adj_list[node] = set(wikics['links'][jump_node])
                     else:
-                        adj_list[node]=set(wikics['links'][node])
+                        adj_list[node] = set(wikics['links'][node])
                 else:
-                    adj_list[node]=set(wikics['links'][node])
+                    adj_list[node] = set(wikics['links'][node])
             else:
-                adj_list[node]=set(wikics['links'][node])
-            #adj_list[node]=set(wikics['links'][node])
-            # ## Remove this later
-            # if len(adj_list[node]) <= 2:
-            #     adj_list[node]=format_dic(row['randomwalkneigh'])
-            # ##
-            centralityev[node]=row['eigenvectorc']
-            centralitybtw[node]=row['betweennessc']
-            centralityd[node]=row['degreec']
-            centralityh[node]=row['harmonicc']
-        for key in adj_list.keys():
-            unique = {}
-            unique2 = {}
-            for item in adj_list[key]:
-                unique[int(item)] = 1
-                unique2[int(item)] = 1
-            freq[int(key)] = unique
-            dist_in_graph[int(key)] = unique2
-        print('teleport occered: ',teleport_count)
-    return feat_data,labels,adj_list,train_mask,test_mask,val_mask,distances,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd
+                adj_list[node] = set(wikics['links'][node])
+            centralityev[node] = row['eigenvectorc']
+            centralitybtw[node] = row['betweennessc']
+            centralityd[node] = row['degreec']
+            centralityh[node] = row['harmonicc']
+        ## Assign frequency and distance in graph for attention here in the loader.
+        #         for key in adj_list.keys():
+        #             unique = {}
+        #             unique2 = {}
+        #             for item in adj_list[key]:
+        #                 unique[int(item)] = 1
+        #                 unique2[int(item)] = 1
+        #             freq[int(key)] = unique
+        #             dist_in_graph[int(key)] = unique2
+        print('teleport occered: ', teleport_count)
+    wikics_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_list, 'train_mask': train_mask,
+                         'test_mask': test_mask, 'val_mask': val_mask, 'distances': distances,
+                         'cluster_labels': cluster_labels, 'freq': freq, 'dist_in_graph': dist_in_graph,
+                         'centralityev': centralityev, 'centralitybtw': centralitybtw, 'centralityh': centralityh,
+                         'centralityd': centralityd}
+    return wikics_loader_dic
 
+## Loader for ppi
 def load_ppi(random_walk=False,root_folder='/home/thummala/graph-datasets/Dataset-PPI/ppi'):
     #function to format neighbours in random walk dic stored as string
     print("Loading PPI Dataset","random_walk",random_walk)

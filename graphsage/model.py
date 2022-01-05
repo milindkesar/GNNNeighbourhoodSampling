@@ -76,32 +76,6 @@ def generate_bias_ppi(path1,path2):
     feature_labels[feature_labels==-1] = 38
     return feature_labels,distances
 
-def load_cora():
-    num_nodes = 2708
-    num_feats = 1433
-    feat_data = np.zeros((num_nodes, num_feats))
-    labels = np.empty((num_nodes,1), dtype=np.int64)
-    node_map = {}
-    label_map = {}
-    with open("cora/cora.content") as fp:
-        for i,line in enumerate(fp):
-            info = line.strip().split()
-            feat_data[i,:] = list(map(float, info[1:-1]))
-            node_map[info[0]] = i
-            if not info[-1] in label_map:
-                label_map[info[-1]] = len(label_map)
-            labels[i] = label_map[info[-1]]
-
-    adj_lists = defaultdict(set)
-    with open("cora/cora.cites") as fp:
-        for i,line in enumerate(fp):
-            info = line.strip().split()
-            paper1 = node_map[info[0]]
-            paper2 = node_map[info[1]]
-            adj_lists[paper1].add(paper2)
-            adj_lists[paper2].add(paper1)
-    return feat_data, labels, adj_lists
-
 def run_cora():
     torch.autograd.set_detect_anomaly(True)
     np.random.seed(147)
@@ -234,132 +208,9 @@ def run_pubmed():
     print("Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro"))
     print("Average batch time:", np.mean(times))
     print("test F1: ",f1_score(labels[test],test_output.data.numpy().argmax(axis=1),average="micro"))
-def ppi():
-    np.random.seed(1)
-    random.seed(1)
-    #feat_data, labels, adj_lists,train,test,val = myfunc()
-    feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_ppi(
-       random_walk=False)
-    num_nodes = labels.shape[0]
-    features = nn.Embedding(num_nodes, 50)
-    features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
-   # features.cuda()
-    ## My Changes
-    #feature_labels,distance=generate_bias_ppi('/home/thummala/graphsage-pytorch/graphsage/ppi_given.pkl','/home/thummala/graphsage-pytorch/graphsage/ppi-centroids.npy')
-    n1=25
-    n2=10
-    agg1 = MeanAggregator(features, cuda=True)
-    enc1 = Encoder(features, 50, 128, adj_lists, agg1, gcn=False, cuda=False, num_sample=n1)
-    #print(enc1(nodes).numpy().shape)
-    agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False)
-    enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,
-            base_model=enc1, gcn=False, cuda=False,num_sample=n2)
-    #enc1.num_samples = 0
-    #enc2.num_samples = 0
-
-    graphsage = SupervisedGraphSage(121, enc2)
-    #graphsage = SupervisedGraphSage(7, enc1)
-#    graphsage.cuda()
-#     rand_indices = np.random.permutation(num_nodes)
-#     test = rand_indices[:1000]
-#     val = rand_indices[1000:1500]
-#     train = list(rand_indices[1500:])
-    test = np.array([i for i, x in enumerate(test_mask) if x])
-    val = np.array([i for i, x in enumerate(val_mask) if x])
-    train = np.array([i for i, x in enumerate(train_mask) if x])
-    optimizer = torch.optim.Adam(filter(lambda p : p.requires_grad, graphsage.parameters()), lr=0.01)
-    times = []
-    batch_size=256
-    for epoch in range(1):
-        random.shuffle(train)
-        for batch in range(1,len(train)//batch_size):
-            batch_nodes = train[(batch-1)*batch_size:batch*batch_size]
-            #random.shuffle(train)
-            start_time = time.time()
-            optimizer.zero_grad()
-            loss = graphsage.loss(batch_nodes,
-                    Variable(torch.from_numpy(labels[np.array(batch_nodes)]).to(torch.float32)),classification='multi_label')
-            loss.backward()
-            optimizer.step()
-            end_time = time.time()
-            times.append(end_time-start_time)
-            print(batch, loss.data)
-    # # #
-    # #print("node is",val[:1])
-    # #print("adjacency list is",adj_lists[int(val[:1])])
-    # #test1=graphsage.forward(test)
-    # #print("test",test1)
-    val_output = graphsage.forward(val)
-    test_output = graphsage.forward(test)
-    print("Validation F1:",F1_score(labels[val], torch.sigmoid(val_output).data.numpy()))
-    print("Average batch time:"+ str(np.mean(times)))
-    print("test F1: ", F1_score(labels[test], torch.sigmoid(test_output).data.numpy()))
 
 
-def run_wiki_cs():
-    num_nodes = 11701
-    feat_data, labels, adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd= load_wikics(random_walk=True)
-    features = nn.Embedding(11701, 300)
-    features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
-    n1 = 65
-    n2 = 20
-    epochs=50
-    #agg1 = MeanAggregator(features, cuda=False, feature_labels=feature_labels, distance=distance)
-    agg1 = Aggregator1(features, cuda=False, feature_labels=feature_labels, distance=distance,freq= freq,spectral=[centralityev,centralitybtw,centralityh,centralityd],dist_btwn=dist_in_graph, adj_list=adj_lists)
-    enc1 = Encoder(features, 300, 128, adj_lists, agg1, gcn=False, cuda=False, feature_labels=feature_labels,
-                   distance=distance, num_sample=n1)
-    #agg2 = Aggregator1(lambda nodes : enc1(nodes).t(), cuda=False, feature_labels=feature_labels, distance=distance, freq=freq, spectral=[centralityev,centralitybtw,centralityh,centralityd], dist_btwn=dist_in_graph, adj_list=adj_lists)
-    # print(enc1(nodes).numpy().shape)
-    #agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False,feature_labels=feature_labels, distance=distance)
-    #enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=feature_labels, distance=distance,num_sample=n2)
-    graphsage = SupervisedGraphSage(10, enc1)
-    #graphsage = SupervisedGraphSage(10, enc1)
-    test = np.array([i for i, x in enumerate(test_mask) if x])
-    val = np.array([i for i, x in enumerate(val_mask) if x])
-    train = np.array([i for i, x in enumerate(train_mask) if x])
-    print("Train Size ",len(train))
-    print("Test Size ",len(test))
-    print("Val Size ",len(val))
-    #optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, graphsage.parameters()), lr=0.05)
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, graphsage.parameters()), lr=0.02)
-    times = []
-    labels=np.array(labels)
-    train_loss=[]
-    val_losses=[]
-    for epoch in range(epochs):
-        batch_nodes = train[:256]
-        val_nodes = val[:256]
-        random.shuffle(train)
-        random.shuffle(val)
-        start_time = time.time()
-        optimizer.zero_grad()
-        loss = graphsage.loss(batch_nodes,Variable(torch.LongTensor(labels[np.array(batch_nodes)])))
-        loss.backward()
-        optimizer.step()
-        end_time = time.time()
-        times.append(end_time - start_time)
-        train_loss.append(loss.data)
-        with torch.no_grad():
-                graphsage.eval()
-                val_loss = graphsage.loss(val_nodes, Variable(torch.LongTensor(labels[np.array(val_nodes)])))
-                val_losses.append(val_loss.data)
-        if epoch%5 == 0:
-            print(epoch, " training loss: " +str(loss.data) + "  Validation Loss: "+str(val_loss.data))
-
-
-
-    # #
-    #val_output = graphsage.forward(val)
-    test_output = graphsage.forward(test)
-    #print("Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro"))
-    print("Average batch time:" + str(np.mean(times)))
-    print("test F1: ", f1_score(labels[test], test_output.data.numpy().argmax(axis=1), average="micro"))
-    plt.plot(range(epochs),train_loss)
-    plt.plot(range(epochs),val_losses)
-    plt.legend(['train_loss','val_loss'])
-    plt.xlabel('epochs')
-    plt.ylabel('loss')
-    plt.show()
+### Helper function to evaluate and write test results
 def evaluate(model,test,out_dir,labels,epoch,classification):
     results={}
     test_output = model.forward(test)
@@ -374,54 +225,67 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
     with open(out_dir+'/test.txt','a+') as out:
         out.write(json.dumps(results)+'\n')
 
-
-def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2):
+### Helper function to run the model for a given dataset
+def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False):
     classification='normal'
     print("random walk",rw)
+    ## Loading dataset
     if name == 'wikics':
-        feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
-        feat_data=np.array(feat_data)
-        labels = np.array(labels)
+        data_dic = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
+        #feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
+        data_dic['feat_data']=np.array(data_dic['feat_data'])
+        data_dic['labels'] = np.array(data_dic['labels'])
     if name == 'ppi':
+        data_dic={}
         feat_data,labels,adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd = load_ppi(random_walk=rw)
         classification='multi_label'
-    num_nodes = feat_data.shape[0]
-    features = nn.Embedding(feat_data.shape[0],feat_data.shape[1])
-    features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
+
+    ## Defining some useful terms (such as features, number of classes, etc.)
+    num_nodes = data_dic['feat_data'].shape[0]
+    features = nn.Embedding(data_dic['feat_data'].shape[0],data_dic['feat_data'].shape[1])
+    features.weight = nn.Parameter(torch.FloatTensor(data_dic['feat_data']), requires_grad=False)
     n1 = neighbours1
     n2 = neighbours2
-    num_feats=feat_data.shape[1]
+    num_feats=data_dic['feat_data'].shape[1]
     n_layers = n_layers
     if name=='ppi':
         n_classes=121
     else:
-        unique_labels=np.unique(labels)
+        unique_labels=np.unique(data_dic['labels'])
         n_classes = len(unique_labels)
     epochs=epochs
+
     print("aggregator is :",aggregator)
     print("using softmax attention :",attention)
+
+
+    ## Using Mean Aggregator
     if aggregator == 'mean':
-        agg1 = MeanAggregator(features, cuda=False, feature_labels=feature_labels, distance=distance)
-        enc1 = Encoder(features, num_feats, 128, adj_lists, agg1, gcn=False, cuda=False, feature_labels=feature_labels,distance=distance, num_sample=n1)
+        agg1 = MeanAggregator(features, cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'])
+        enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=False, cuda=False, feature_labels=data_dic['cluster_labels'],distance=data_dic['distances'], num_sample=n1)
         if n_layers > 1:
-            agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False,feature_labels=feature_labels, distance=distance)
-            enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=feature_labels, distance=distance,num_sample=n2)
+            agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False,feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'])
+            enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'],num_sample=n2)
             graphsage = SupervisedGraphSage(n_classes, enc2)
         else:
             graphsage = SupervisedGraphSage(n_classes,enc1)
+
+    ## Using Weighted Mean Aggregator (Changes to attention should be done HERE)
     elif aggregator == 'weighted_mean':
         print('using weighted mean aggregator...')
-        agg1 = Aggregator1(features, cuda=False, feature_labels=feature_labels, distance=distance, freq=freq,spectral=[centralityev, centralitybtw, centralityh, centralityd], dist_btwn=dist_in_graph,adj_list=adj_lists,attention=attention,addnodefeats=includenodefeats,layerno=1)
-        enc1 = Encoder(features, num_feats, 128, adj_lists, agg1, gcn=False, cuda=False, feature_labels=feature_labels,distance=distance, num_sample=n1)
+        agg1 = Aggregator1(features, cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], freq=data_dic['freq'],spectral=[data_dic['centralityev'], data_dic['centralitybtw'], data_dic['centralityh'], data_dic['centralityd']], dist_btwn=data_dic['dist_in_graph'],adj_list=data_dic['adj_lists'],attention=attention,addnodefeats=includenodefeats,layerno=1)
+        enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=False, cuda=False, feature_labels=data_dic['cluster_labels'],distance=data_dic['distances'], num_sample=n1)
         if n_layers > 1:
-            agg2 = Aggregator1(lambda nodes : enc1(nodes).t(), cuda=False, feature_labels=feature_labels, distance=distance, freq=freq, spectral=[centralityev,centralitybtw,centralityh,centralityd], dist_btwn=dist_in_graph, adj_list=adj_lists,attention=attention,addnodefeats=includenodefeats,layerno=2)
-            enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=feature_labels, distance=distance,num_sample=n2)
+            agg2 = Aggregator1(lambda nodes : enc1(nodes).t(), cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], freq=data_dic['freq'], spectral=[data_dic['centralityev'],data_dic['centralitybtw'],data_dic['centralityh'],data_dic['centralityd']], dist_btwn=data_dic['dist_in_graph'], adj_list=data_dic['adj_lists'],attention=attention,addnodefeats=includenodefeats,layerno=2)
+            enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'],num_sample=n2)
             graphsage = SupervisedGraphSage(n_classes, enc2)
         else:
             graphsage = SupervisedGraphSage(n_classes,enc1)
     else:
         print('aggregator not supported')
 
+
+    ## Training Loop
     for k in range(random_iter):
         if outdir != None:
             out_dir = outdir
@@ -429,11 +293,12 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
             out_dir = 'res/' + name
         out_dir=out_dir+'/'+str(k)
         os.makedirs(out_dir, exist_ok=True)
+        ## To see if predefined splits exist (Otherwise use random splits (As of Now: 0.7 train, 0.2 test, 0.1 val))
         try:
+            test = np.array([i for i, x in enumerate(data_dic['test_mask']) if x])
+            val = np.array([i for i, x in enumerate(data_dic['val_mask']) if x])
+            train = np.array([i for i, x in enumerate(data_dic['train_mask']) if x])
             print('using given splits...')
-            test = np.array([i for i, x in enumerate(test_mask) if x])
-            val = np.array([i for i, x in enumerate(val_mask) if x])
-            train = np.array([i for i, x in enumerate(train_mask) if x])
             print('test',test.shape)
             print('val',val.shape)
             print('train',train.shape)
@@ -443,45 +308,59 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
             test = rand_indices[:int(0.2*num_nodes)]
             val = rand_indices[int(0.2*num_nodes):int(0.3*num_nodes)]
             train = list(rand_indices[int(0.3*num_nodes):])
+
+        ## Defining optimizer and batch_size
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, graphsage.parameters()), lr=lr)
         times = []
-        labels=np.array(labels)
-        n_passes = len(train)/256
-        # writer = SummaryWriter(log_dir=out_dir)
+        labels=np.array(data_dic['labels'])
+        batch_size=256
+
         for epoch in range(epochs):
-            batch_nodes = train[:256]
             val_nodes = val[:256]
             random.shuffle(train)
             random.shuffle(val)
             start_time = time.time()
-            optimizer.zero_grad()
-            loss = graphsage.loss(batch_nodes,Variable(torch.LongTensor(labels[np.array(batch_nodes)])),classification)
-            loss.backward()
-            optimizer.step()
+            training_loss_epoch = []
+            for batch in range(0,len(train),batch_size):
+                batch_nodes = train[batch:batch+batch_size]
+                optimizer.zero_grad()
+                loss = graphsage.loss(batch_nodes,Variable(torch.LongTensor(labels[np.array(batch_nodes)])),classification)
+                loss.backward()
+                optimizer.step()
+                training_loss_epoch.append(loss.data.numpy())
+                #train_loss.append(loss.data)
+                        #val_losses.append(val_loss.data)
             end_time = time.time()
             times.append(end_time - start_time)
-            #train_loss.append(loss.data)
             with torch.no_grad():
-                    graphsage.eval()
-                    val_loss = graphsage.loss(val_nodes, Variable(torch.LongTensor(labels[np.array(val_nodes)])),classification)
-                    #val_losses.append(val_loss.data)
+                graphsage.eval()
+                val_loss = graphsage.loss(val_nodes, Variable(torch.LongTensor(labels[np.array(val_nodes)])),classification)
+            ## Every 5 epochs write training loss (mean of all batches) and validation loss
             if epoch%5 == 0:
                 temp={}
                 temp['epoch']=epoch
-                temp['training loss']=str(loss.data)
+                temp['training loss']=str(sum(training_loss_epoch)/len(training_loss_epoch))
                 temp['validation loss']=str(val_loss.data)
                 with open(out_dir+'/training_info.txt', 'a+') as convert_file:
                     convert_file.write(json.dumps(temp)+'\n')
-                print(epoch, " training loss: " +str(loss.data) + "  Validation Loss: "+str(val_loss.data))
+                print(epoch, " training loss: " +str(sum(training_loss_epoch)/len(training_loss_epoch)) + "  Validation Loss: "+str(val_loss.data))
+            ## Every 50 epochs or the final epoch, write the test loss to file.
             if epoch%50 == 0 or epoch == epochs-1:
                 evaluate(graphsage,test, out_dir,labels,epoch,classification)
-    test_output = graphsage.forward(test)
-    predicted_scores=test_output.data.numpy().argmax(axis=1)
-    #print(predicted_scores)
-    np.save('/home/thummala/graphsage-pytorch/res/wikics_khopteleport_dfactor2/predictions.npy', predicted_scores)
-    embeds = graphsage.returnembedding(test).detach().t().numpy()
-    np.save('/home/thummala/graphsage-pytorch/res/wikics_khopteleport_dfactor2/embeddings.npy', embeds)
-    #construct_agg(outdir)
+
+    ## Helper code to write save the predictions and embeddings for qualitative analysis
+    if save_predictions:
+        test_output = graphsage.forward(test)
+        predicted_scores=test_output.data.numpy().argmax(axis=1)
+        np.save(outdir+'/predictions.npy', predicted_scores)
+        embeds = graphsage.returnembedding(test).detach().t().numpy()
+        np.save(outdir+'/embeddings.npy', embeds)
+
+    ## Helper code to write the best results and mean results of multiple iterations
+    if random_iter == 1:
+        pass
+    else:
+        construct_agg(outdir)
         # val_output = graphsage.forward(val)
         # test_output = graphsage.forward(test)
         # valid_f1 = f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro")
@@ -494,8 +373,4 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         # print("Validation F1:", valid_f1)
         # print("Average batch time:" + str(np.mean(times)))
         # print("test F1: ", test_f1)
-
-
-# if __name__ == "__main__":
-#     ppi()
 

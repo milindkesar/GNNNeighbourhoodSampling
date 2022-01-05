@@ -108,6 +108,7 @@ ENV/
 # Custom
 res/
 datasets/
+testing_modules/
 
 *.pickle
 *.pkl
