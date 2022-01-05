@@ -10,7 +10,7 @@ import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
-from graphsage.walkshelper import generate_walks
+from graphsage.walkshelper import generate_featureteleportwalks, generate_clusterteleportwalks
 import random
 from graphsage.lsh import train_lsh,get_nearest_neighbors
 
@@ -311,8 +311,8 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
         try:
             node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
         except:
-            node_df = generate_walks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
-                                     cluster_teleport=teleport, root_folder=root_folder, workers=workers)
+            node_df = generate_featureteleportwalks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
+                                     teleport_weight=teleport, root_folder=root_folder, workers=workers)
     elif type_walk == 'clusterteleport':
         print('Loading cluster teleport walks')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_clusterrw.csv')
@@ -320,10 +320,15 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
         print('Loading feature teleport walks')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_featureteleportrw.csv')
     elif type_walk == 'customfeatureteleport':
-        print('generating walks with parameters specified: p=' + str(p) + ' q=' + str(q) + ' walklength=' + str(
+        print('generating feature teleport walks with parameters specified: p=' + str(p) + ' q=' + str(q) + ' walklength=' + str(
             walk_length) + ' num_walks=' + str(num_walks) + ' teleport=' + str(teleport))
-        node_df = generate_walks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
-                                 cluster_teleport=teleport, root_folder=root_folder, workers=workers)
+        node_df = generate_featureteleportwalks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
+                                 teleport_weight=teleport, root_folder=root_folder, workers=workers)
+    elif type_walk == 'customclusterteleport':
+        print('generating cluster teleport walks with parameters specified: p=' + str(p) + ' q=' + str(q) + ' walklength=' + str(
+            walk_length) + ' num_walks=' + str(num_walks) + ' teleport=' + str(teleport))
+        node_df = generate_clusterteleportwalks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
+                                 teleport_weight=teleport, root_folder=root_folder, workers=workers, n_clusters=14)
     else:
         print('Specify correct type:- default, clusterteleport or featureteleport-->loading default now')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')

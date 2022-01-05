@@ -22,6 +22,7 @@ parser.add_argument('--walk_length',default=10,type=int)
 parser.add_argument('--teleport',default=0.2,type=float)
 parser.add_argument('--teleport_khop')
 parser.add_argument('--dfactor',default=2,type=float)
+parser.add_argument('--save_predictions')
 args = parser.parse_args()
 def t_or_f(arg):
     ua = str(arg).upper()
@@ -30,11 +31,12 @@ def t_or_f(arg):
     elif 'FALSE'.startswith(ua):
        return False
     else:
-       pass  #error condition maybe?
+       return False
 if __name__ == "__main__":
     rw=t_or_f(args.rand_walk)
     teleport_khop = t_or_f(args.teleport_khop)
+    save_predictions = t_or_f(args.save_predictions)
     #print(args.dataset,args.epochs,rw,args.neighbours1,args.neighbours2,args.aggregator,args.iter,args.outdir)
     #print(args.typewalk)
     print(args.p,args.q)
-    run_general(name=args.dataset,outdir=args.outdir,rw=rw,neighbours1=args.neighbours1,neighbours2=args.neighbours2,aggregator=args.aggregator,epochs=args.epochs,random_iter=args.iter,n_layers=args.n_layers, attention=args.attention,lr=args.lr,includenodefeats=args.includenodefeats,type_of_walk=args.typewalk, p=args.p, q=args.q, num_walks=args.num_walks, walk_length=args.walk_length, teleport=args.teleport, teleport_khop=teleport_khop, dfactor=args.dfactor)
+    run_general(name=args.dataset,outdir=args.outdir,rw=rw,neighbours1=args.neighbours1,neighbours2=args.neighbours2,aggregator=args.aggregator,epochs=args.epochs,random_iter=args.iter,n_layers=args.n_layers, attention=args.attention,lr=args.lr,includenodefeats=args.includenodefeats,type_of_walk=args.typewalk, p=args.p, q=args.q, num_walks=args.num_walks, walk_length=args.walk_length, teleport=args.teleport, teleport_khop=teleport_khop, dfactor=args.dfactor, save_predictions=save_predictions)
