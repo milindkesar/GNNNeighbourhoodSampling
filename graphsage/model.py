@@ -226,12 +226,15 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
         out.write(json.dumps(results)+'\n')
 
 ### Helper function to run the model for a given dataset
-def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False):
+def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = 5, augment_khop=False):
     classification='normal'
     print("random walk",rw)
     ## Loading dataset
     if name == 'wikics':
-        data_dic = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
+        lsh_helper = {'n_vectors': n_vectors, 'search_radius': search_radius, 'num_lsh_neighbours': num_lsh_neigbours, 'atleast': atleast}
+        if augment_khop or teleport_khop:
+            print('lsh to be constructed with ',lsh_helper)
+        data_dic = load_wikics(lsh_helper, random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
         #feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
         data_dic['feat_data']=np.array(data_dic['feat_data'])
         data_dic['labels'] = np.array(data_dic['labels'])
@@ -246,6 +249,7 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
     features.weight = nn.Parameter(torch.FloatTensor(data_dic['feat_data']), requires_grad=False)
     n1 = neighbours1
     n2 = neighbours2
+    n_lsh_neighbours = n_lsh_neighbours_sample
     num_feats=data_dic['feat_data'].shape[1]
     n_layers = n_layers
     if name=='ppi':
@@ -262,10 +266,10 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
     ## Using Mean Aggregator
     if aggregator == 'mean':
         agg1 = MeanAggregator(features, cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'])
-        enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=False, cuda=False, feature_labels=data_dic['cluster_labels'],distance=data_dic['distances'], num_sample=n1)
+        enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=False, cuda=False, feature_labels=data_dic['cluster_labels'],distance=data_dic['distances'], num_sample=n1, lsh_neighbours=data_dic['lsh_neighbour_list'], n_lsh_neighbours=n_lsh_neighbours, lsh_augment=augment_khop)
         if n_layers > 1:
             agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False,feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'])
-            enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'],num_sample=n2)
+            enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,base_model=enc1, gcn=False, cuda=False,feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'],num_sample=n2,lsh_neighbours=data_dic['lsh_neighbour_list'], n_lsh_neighbours= n_lsh_neighbours, lsh_augment=augment_khop)
             graphsage = SupervisedGraphSage(n_classes, enc2)
         else:
             graphsage = SupervisedGraphSage(n_classes,enc1)

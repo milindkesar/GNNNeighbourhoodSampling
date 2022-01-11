@@ -11,7 +11,7 @@ class Encoder(nn.Module):
             embed_dim, adj_lists, aggregator,
             num_sample=10,
             base_model=None, gcn=False, cuda=False,feature_labels=None,distance=None,
-            feature_transform=False): 
+            feature_transform=False, lsh_neighbours = None, n_lsh_neighbours = 5, lsh_augment=False):
         super(Encoder, self).__init__()
         self.feature_labels=feature_labels
         self.distance=distance
@@ -20,6 +20,9 @@ class Encoder(nn.Module):
         self.adj_lists = adj_lists
         self.aggregator = aggregator
         self.num_sample = num_sample
+        self.lsh_neighbours = lsh_neighbours
+        self.n_lsh_neighbours = n_lsh_neighbours
+        self.lsh_augment=lsh_augment
         if base_model != None:
             self.base_model = base_model
 
@@ -38,8 +41,11 @@ class Encoder(nn.Module):
         nodes     -- list of nodes
         """
         #print("In encoders" +str(self.adj_lists[4]))
-        neigh_feats = self.aggregator.forward(nodes, [self.adj_lists[int(node)] for node in nodes], 
-                self.num_sample)
+        if self.lsh_augment:
+            neigh_feats = self.aggregator.forward(nodes, [self.adj_lists[int(node)] for node in nodes],
+                    self.num_sample, lsh_neighbours = [self.lsh_neighbours[int(node)] for node in nodes], n_lsh_neighbours= self.n_lsh_neighbours, lsh_augment = self.lsh_augment)
+        else:
+            neigh_feats = self.aggregator.forward(nodes, [self.adj_lists[int(node)] for node in nodes],self.num_sample)
         #print("neigh_feats",torch.isnan(neigh_feats).any())
 
         if not self.gcn:

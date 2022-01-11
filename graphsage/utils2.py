@@ -232,9 +232,70 @@ def custom_load_cora2():
 
     return feat_data, labels, adj_lists2,dist_in_graph,freq,feature_labels, distances,degrees
 
+
+# function to return candidate nodes based on lsh
+def return_lsh_candidates(features, n_vectors=16, search_radius=3, num_lsh_neighbours=10, atleast=False):
+    model = train_lsh(features, n_vectors, seed=143)
+    lsh_candidates_dic = {}
+    for item_id in range(features.shape[0]):
+        lsh_candidates_dic[item_id] = {}
+        query_vector = features[item_id]
+        nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model,
+                                                  max_search_radius=search_radius)
+        if atleast:
+            if len(nearest_neighbors) < num_lsh_neighbours:
+                radius = search_radius + 1
+                while True:
+                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model,
+                                                              max_search_radius=radius)
+                    if (len(nearest_neighbors) > num_lsh_neighbours) or (radius >= n_vectors // 2):
+                        break
+                    radius = radius + 1
+        for i, row in nearest_neighbors[:num_lsh_neighbours].iterrows():
+            lsh_candidates_dic[item_id][int(row['id'])] = row['similarity']
+    return lsh_candidates_dic
+
+
+# {'num_vectors':16, 'search_radius': False, 'num_lsh_neighbours': 10,'atleast': False}
+def Do_Teleport_Khop(adj_list, lsh_cand_dic, feats, dfactor):
+    # helper function
+    mod_adj_list = adj_list.copy()
+
+    def flip(p):
+        return True if random.random() < p else False
+
+    teleport_count = 0
+    for node, node_feature in enumerate(list(feats)):
+        if len(set(adj_list[node])) < 10:
+            if len(set(adj_list[node])) == 0:
+                tel_prob = 1
+            else:
+                tel_prob = 1 / (dfactor * len(set(adj_list[node])))
+            if flip(tel_prob):
+                t = list(lsh_cand_dic[node].values())
+                if sum(t) == 0:
+                    print('problem encountered at node ', node,
+                          ' lsh returned zero similarity with candidate nodes')
+                    mod_adj_list[node] = set(adj_list[node])
+                    print('the adjacency list of problem node is ', adj_list[node])
+                else:
+                    prob_weights = list(t / sum(t))
+                    jump_node = np.random.choice(list(lsh_cand_dic[node].keys()), p=prob_weights)
+                    if adj_list[node] != adj_list[jump_node]:
+                        teleport_count += 1
+                    mod_adj_list[node] = set(adj_list[jump_node])
+            else:
+                mod_adj_list[node] = set(adj_list[node])
+        else:
+            mod_adj_list[node] = set(adj_list[node])
+    print("teleport count: ", teleport_count)
+    return mod_adj_list
+
+
 ## Loader for wikics
-def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, walk_length=10, teleport=0.2, workers=1,
-                teleport_khop=False, dfactor=2, use_centroid=False):
+def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, num_walks=10, walk_length=10,
+                teleport=0.2, workers=1,
+                teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False):
     # function to format neighbours in random walk dic stored as string
     print("Loading WikiCS")
     wikics_loader_dic = {}
@@ -275,30 +336,6 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
                     distances[(i, j)] = 1
         return distances
 
-    # function to return candidate nodes based on lsh
-    def return_lsh_candidates(features, n_vectors=16):
-        model = train_lsh(features, n_vectors, seed=143)
-        temp = {}
-        for item_id in range(features.shape[0]):
-            temp[item_id] = {}
-            query_vector = features[item_id]
-            nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=2)
-            if len(nearest_neighbors) < 20:
-                radius = 3
-                while True:
-                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model,
-                                                              max_search_radius=radius)
-                    if len(nearest_neighbors) > 20:
-                        break
-                    radius = radius + 1
-            for i, row in nearest_neighbors[:20].iterrows():
-                temp[item_id][int(row['id'])] = row['similarity']
-        return temp
-
-    # helper function
-    def flip(p):
-        return True if random.random() < p else False
-
     ##Root Folder
     root_folder = '/home/thummala/graphsage-pytorch/datasets/Dataset-WikiCS'
 
@@ -312,7 +349,7 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
             node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
         except:
             node_df = generate_featureteleportwalks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
-                                     teleport_weight=teleport, root_folder=root_folder, workers=workers)
+                                                    teleport_weight=teleport, root_folder=root_folder, workers=workers)
     elif type_walk == 'clusterteleport':
         print('Loading cluster teleport walks')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_clusterrw.csv')
@@ -320,15 +357,18 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
         print('Loading feature teleport walks')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo_featureteleportrw.csv')
     elif type_walk == 'customfeatureteleport':
-        print('generating feature teleport walks with parameters specified: p=' + str(p) + ' q=' + str(q) + ' walklength=' + str(
+        print('generating feature teleport walks with parameters specified: p=' + str(p) + ' q=' + str(
+            q) + ' walklength=' + str(
             walk_length) + ' num_walks=' + str(num_walks) + ' teleport=' + str(teleport))
         node_df = generate_featureteleportwalks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
-                                 teleport_weight=teleport, root_folder=root_folder, workers=workers)
+                                                teleport_weight=teleport, root_folder=root_folder, workers=workers)
     elif type_walk == 'customclusterteleport':
-        print('generating cluster teleport walks with parameters specified: p=' + str(p) + ' q=' + str(q) + ' walklength=' + str(
+        print('generating cluster teleport walks with parameters specified: p=' + str(p) + ' q=' + str(
+            q) + ' walklength=' + str(
             walk_length) + ' num_walks=' + str(num_walks) + ' teleport=' + str(teleport))
         node_df = generate_clusterteleportwalks(data2=wikics, p=p, q=q, num_walks=num_walks, walklength=walk_length,
-                                 teleport_weight=teleport, root_folder=root_folder, workers=workers, n_clusters=14)
+                                                teleport_weight=teleport, root_folder=root_folder, workers=workers,
+                                                n_clusters=14)
     else:
         print('Specify correct type:- default, clusterteleport or featureteleport-->loading default now')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
@@ -339,6 +379,7 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
     centralityd = [0] * len(train_mask)
     centralitybtw = [0] * len(train_mask)
     centralityh = [0] * len(train_mask)
+    lsh_neighbourlist_dic = {}
     adj_list = {}
     freq = {}
     dist_in_graph = {}
@@ -363,58 +404,34 @@ def load_wikics(random_walk=False, type_walk='default', p=1, q=1, num_walks=10, 
             centralityh[node] = row['harmonicc']
     if not random_walk:
         print('loading khop neighbours')
-        teleport_count=0
-        if teleport_khop:
+        teleport_count = 0
+        if teleport_khop or augment_khop:
             print('creating lsh')
-            lsh_cand_dic = return_lsh_candidates(np.array(feat_data))
+            lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
+                                                 num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
+                                                 atleast=lsh_helper['atleast'],
+                                                 search_radius=lsh_helper['search_radius'])
             print('done')
-            print('dfactor', dfactor)
+        else:
+            lsh_cand_dic = {}
         for i, row in node_df.iterrows():
             node = int(row['nodes'])
-            if teleport_khop:
-                if len(set(wikics['links'][node])) < 10:
-                    if len(set(wikics['links'][node])) == 0:
-                        tel_prob = 1
-                    else:
-                        tel_prob = 1 / (dfactor * len(set(wikics['links'][node])))
-                    if flip(tel_prob):
-                        t = list(lsh_cand_dic[node].values())
-                        if sum(t) == 0:
-                            print('problem encountered at node ', node,
-                                  ' lsh returned zero similarity with candidate nodes')
-                            adj_list[node] = set(wikics['links'][node])
-                            print('the adjacency list of problem node is ', adj_list[node])
-                        else:
-                            teleport_count += 1
-                            prob_weights = list(t / sum(t))
-                            jump_node = np.random.choice(list(lsh_cand_dic[node].keys()), p=prob_weights)
-                            adj_list[node] = set(wikics['links'][jump_node])
-                    else:
-                        adj_list[node] = set(wikics['links'][node])
-                else:
-                    adj_list[node] = set(wikics['links'][node])
-            else:
-                adj_list[node] = set(wikics['links'][node])
+            adj_list[node] = set(wikics['links'][node])
             centralityev[node] = row['eigenvectorc']
             centralitybtw[node] = row['betweennessc']
             centralityd[node] = row['degreec']
             centralityh[node] = row['harmonicc']
-        ## Assign frequency and distance in graph for attention here in the loader.
-        #         for key in adj_list.keys():
-        #             unique = {}
-        #             unique2 = {}
-        #             for item in adj_list[key]:
-        #                 unique[int(item)] = 1
-        #                 unique2[int(item)] = 1
-        #             freq[int(key)] = unique
-        #             dist_in_graph[int(key)] = unique2
-        print('teleport occered: ', teleport_count)
+            if augment_khop:
+                lsh_neighbourlist_dic[node] = list(lsh_cand_dic[node].keys())
+        if teleport_khop:
+            adj_list = Do_Teleport_Khop(adj_list=adj_list, lsh_cand_dic=lsh_cand_dic, feats=feat_data, dfactor=dfactor)
     wikics_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_list, 'train_mask': train_mask,
                          'test_mask': test_mask, 'val_mask': val_mask, 'distances': distances,
                          'cluster_labels': cluster_labels, 'freq': freq, 'dist_in_graph': dist_in_graph,
                          'centralityev': centralityev, 'centralitybtw': centralitybtw, 'centralityh': centralityh,
-                         'centralityd': centralityd}
+                         'centralityd': centralityd, 'lsh_neighbour_list': lsh_neighbourlist_dic}
     return wikics_loader_dic
+
 
 ## Loader for ppi
 def load_ppi(random_walk=False,root_folder='/home/thummala/graph-datasets/Dataset-PPI/ppi'):

@@ -157,7 +157,7 @@ class MeanAggregator(nn.Module):
 
         self.feature_labels = feature_labels
         self.distance=distance
-    def forward(self, nodes, to_neighs, num_sample=10):
+    def forward(self, nodes, to_neighs, num_sample=10, lsh_neighbours = {}, n_lsh_neighbours = None, lsh_augment=False):
         """
         nodes --- list of nodes in a batch
         to_neighs --- list of sets, each set is the set of neighbors for node in batch
@@ -194,7 +194,26 @@ class MeanAggregator(nn.Module):
                 samp_neighs.append(set(temp2))
             return samp_neighs
         _set = set
-        if not num_sample is None:
+
+        if lsh_augment:
+            if (not num_sample is None):
+                _sample = random.sample
+                samp_neighs = [_set(_sample(to_neigh,
+                            num_sample,
+                            )) if len(to_neigh) >= num_sample else to_neigh for to_neigh in to_neighs]
+                for index, item in enumerate(samp_neighs):
+                    if (not n_lsh_neighbours is None):
+                        samp_neighs[index].update(lsh_neighbours[index][:n_lsh_neighbours])
+                    else:
+                        samp_neighs[index].update(lsh_neighbours[index])
+            else:
+                samp_neighs = to_neighs
+                for index, item in enumerate(samp_neighs):
+                    if (not n_lsh_neighbours is None):
+                        samp_neighs[index].update(lsh_neighbours[index][:n_lsh_neighbours])
+                    else:
+                        samp_neighs[index].update(lsh_neighbours[index])
+        elif not num_sample is None:
             _sample = random.sample
             samp_neighs = [_set(_sample(to_neigh,
                             num_sample,
@@ -224,19 +243,13 @@ class MeanAggregator(nn.Module):
         if self.cuda:
             mask = mask.cuda()
         num_neigh = mask.sum(1, keepdim=True)
-        #print("num neigh",num_neigh.shape)
-        #print("mask before 1.5", torch.isnan(mask).any())
         mask = mask.div(num_neigh)
-        #print(num_neigh)
         if torch.isnan(mask).any():
             mask[mask != mask] = 0
-        #print("mask after 2", torch.isnan(mask).any())
         if self.cuda:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list).cuda())
         else:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list))
             #embed_matrix = self.features(torch.LongTensor(list(unique_nodes.values())))
-        #print("embed matrix",embed_matrix)
-        #print("nan check", torch.isnan(embed_matrix).any())
         to_feats = mask.mm(embed_matrix)
         return to_feats
