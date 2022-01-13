@@ -1,0 +1,25 @@
+## Naming Convention --> ## Naming Convention --> lshaugment_neighbours1_neighbours2_lshneighbourssample_nlayer_numlshneighbours_atleast_searchradius
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_5_2_10_true_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 2 --atleast True --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_10_2_10_true_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 2 --atleast True --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_20_2_20_true_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 20 --search_radius 2 --atleast True --num_lsh_neighbours 20 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_10_2_10_false_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 2 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_5_2_10_false_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 2 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_5_2_10_false_1 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 1 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_10_2_10_false_1 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 1 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_na_2_10_false_2 --n_layers 2 --includenodefeats no --augment_khop True --search_radius 2 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_na_2_10_false_1 --n_layers 2 --includenodefeats no --augment_khop True --search_radius 1 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_5_2_10_false_0 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 0 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_10_2_10_false_0 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 0 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset ppi --epochs 30 --rand_walk False --neighbours1 25 --neighbours2 10 --aggregator mean --attention normal --iter 3 --outdir /home/thummala/graphsage-pytorch/res/ppi/lshaugment_25_10_na_2_10_false_0 --n_layers 2 --includenodefeats no --augment_khop True --search_radius 0 --atleast False --num_lsh_neighbours 10 --save_predictions True

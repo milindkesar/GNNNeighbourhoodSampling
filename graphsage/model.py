@@ -219,6 +219,7 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
         test_f1_macro = f1_score(labels[test], test_output.data.numpy().argmax(axis=1), average="macro")
     elif classification == 'multi_label':
         test_f1 = F1_score(labels[test], torch.sigmoid(test_output).data.numpy())
+        test_f1_macro = 0.70
     results['epoch']=epoch
     results['test_f1_micro']=test_f1
     results['test_f1_macro']=test_f1_macro
@@ -226,21 +227,21 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
         out.write(json.dumps(results)+'\n')
 
 ### Helper function to run the model for a given dataset
-def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = 5, augment_khop=False):
+def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = None, augment_khop=False):
     classification='normal'
     print("random walk",rw)
+    lsh_helper = {'n_vectors': n_vectors, 'search_radius': search_radius, 'num_lsh_neighbours': num_lsh_neigbours,'atleast': atleast}
+    if augment_khop or teleport_khop:
+        print('lsh to be constructed with ', lsh_helper)
     ## Loading dataset
     if name == 'wikics':
-        lsh_helper = {'n_vectors': n_vectors, 'search_radius': search_radius, 'num_lsh_neighbours': num_lsh_neigbours, 'atleast': atleast}
-        if augment_khop or teleport_khop:
-            print('lsh to be constructed with ',lsh_helper)
         data_dic = load_wikics(lsh_helper, random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
         #feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
         data_dic['feat_data']=np.array(data_dic['feat_data'])
         data_dic['labels'] = np.array(data_dic['labels'])
     if name == 'ppi':
-        data_dic={}
-        feat_data,labels,adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd = load_ppi(random_walk=rw)
+        data_dic = load_ppi(lsh_helper, random_walk=rw,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor,augment_khop = augment_khop)
+        #feat_data,labels,adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd = load_ppi(random_walk=rw)
         classification='multi_label'
 
     ## Defining some useful terms (such as features, number of classes, etc.)

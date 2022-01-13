@@ -234,27 +234,30 @@ def custom_load_cora2():
 
 
 # function to return candidate nodes based on lsh
-def return_lsh_candidates(features, n_vectors=16, search_radius=3, num_lsh_neighbours=10, atleast=False):
+def return_lsh_candidates(features, n_vectors=16, search_radius = 3, num_lsh_neighbours = 10, atleast = False):
     model = train_lsh(features, n_vectors, seed=143)
     lsh_candidates_dic = {}
     for item_id in range(features.shape[0]):
         lsh_candidates_dic[item_id] = {}
         query_vector = features[item_id]
-        nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model,
-                                                  max_search_radius=search_radius)
+        nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=search_radius)
+        count = 0
         if atleast:
             if len(nearest_neighbors) < num_lsh_neighbours:
                 radius = search_radius + 1
                 while True:
-                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model,
-                                                              max_search_radius=radius)
-                    if (len(nearest_neighbors) > num_lsh_neighbours) or (radius >= n_vectors // 2):
+                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=radius)
+                    if (len(nearest_neighbors) > num_lsh_neighbours) or (radius >= n_vectors//2):
                         break
                     radius = radius + 1
-        for i, row in nearest_neighbors[:num_lsh_neighbours].iterrows():
+        for i, row in nearest_neighbors[:num_lsh_neighbours+1].iterrows():
+            if count == num_lsh_neighbours:
+                break
+            if int(item_id) == int(row['id']):
+                continue
+            count=count+1
             lsh_candidates_dic[item_id][int(row['id'])] = row['similarity']
     return lsh_candidates_dic
-
 
 # {'num_vectors':16, 'search_radius': False, 'num_lsh_neighbours': 10,'atleast': False}
 def Do_Teleport_Khop(adj_list, lsh_cand_dic, feats, dfactor):
@@ -434,101 +437,122 @@ def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, nu
 
 
 ## Loader for ppi
-def load_ppi(random_walk=False,root_folder='/home/thummala/graph-datasets/Dataset-PPI/ppi'):
-    #function to format neighbours in random walk dic stored as string
-    print("Loading PPI Dataset","random_walk",random_walk)
+def load_ppi(lsh_helper, random_walk=False, root_folder='/home/thummala/graph-datasets/Dataset-PPI/ppi',
+             teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2):
+    # function to format neighbours in random walk dic stored as string
+    print("Loading PPI Dataset", "random_walk", random_walk)
+
     def format_dic(mystring):
-        mystring=mystring.replace('{','')
-        mystring=mystring.replace('}','')
-        myarr=mystring.split(',')
-        if myarr==['set()']:
+        mystring = mystring.replace('{', '')
+        mystring = mystring.replace('}', '')
+        myarr = mystring.split(',')
+        if myarr == ['set()']:
             return set()
-        myarr=[int(x) for x in myarr]
+        myarr = [int(x) for x in myarr]
         return set(myarr)
-    #function to format frequency and distance in graph etc
+
+    # function to format frequency and distance in graph etc
     def format_dic2(mystring):
-        mystring=mystring.replace('{','')
-        mystring=mystring.replace('}','')
-        myarr=mystring.split(',')
-        res={}
-        if myarr==['']:
+        mystring = mystring.replace('{', '')
+        mystring = mystring.replace('}', '')
+        myarr = mystring.split(',')
+        res = {}
+        if myarr == ['']:
             return res
         for item in myarr:
-            els=item.split(':')
+            els = item.split(':')
             try:
-                res[int(els[0].replace("'",''))]=int(els[1])
+                res[int(els[0].replace("'", ''))] = int(els[1])
             except:
                 res[int(els[0])] = int(els[1])
         return res
+
     def generate_bias(centroids):
         distances = {}
         for i, c1 in enumerate(centroids):
             for j, c2 in enumerate(centroids):
                 if not (i == j):
-                    distances[(i, j)] = np.linalg.norm(c1 - c2)*100
+                    distances[(i, j)] = np.linalg.norm(c1 - c2) * 100
                 else:
                     distances[(i, j)] = 1
         return distances
+
     def remove_self(adj_list):
-      for key in list(adj_list.keys()):
-        adj_list[key] = set([x for x in list(adj_list[key]) if x != key])
-      return adj_list
-    root_folder=root_folder
-    node_df=pd.read_csv(root_folder+'/node_info.csv')
-    with open(root_folder+'/ppi-G.json',) as F:
-      data=json.load(F)
-    #data.keys()
-    with open(root_folder+'/ppi-id_map.json',) as F:
-      id_maps=json.load(F)
-    with open(root_folder+'/ppi-class_map.json',) as F:
-      label_map=json.load(F)
-    temp=[0]*len(label_map)
+        for key in list(adj_list.keys()):
+            adj_list[key] = set([x for x in list(adj_list[key]) if x != key])
+        return adj_list
+
+    ppi_data_dic = {}
+    num_nodes = 56944
+    adj_list = {}
+    freq = {}
+    dist_in_graph = {}
+    lsh_neighbourlist_dic = {}
+    node_df = pd.read_csv(root_folder + '/node_info.csv')
+    with open(root_folder + '/ppi-G.json', ) as F:
+        data = json.load(F)
+    # data.keys()
+    with open(root_folder + '/ppi-id_map.json', ) as F:
+        id_maps = json.load(F)
+    with open(root_folder + '/ppi-class_map.json', ) as F:
+        label_map = json.load(F)
+    temp = [0] * len(label_map)
     for key in label_map.keys():
-      temp[int(key)] = label_map[key]
-    labels=np.array(temp)
-    feat_data = np.load(root_folder+'/ppi-feats.npy')
-    nodedf=pd.read_csv(root_folder+'/node_info.csv')
-    centroids=np.load(root_folder+'/centroids_kmeans_39.npy')
-    distances = generate_bias(centroids)
-    feature_labels = node_df['cluster_labels']
+        temp[int(key)] = label_map[key]
+    labels = np.array(temp)
+    feat_data = np.load(root_folder + '/ppi-feats.npy')
+    nodedf = pd.read_csv(root_folder + '/node_info.csv')
+
+    if use_centroid:
+        centroids = np.load(root_folder + '/centroids_kmeans_39.npy')
+        distances = generate_bias(centroids)
+        cluster_labels = node_df['cluster_labels']
+    else:
+        centroids = []
+        distances = []
+        cluster_labels = []
+
     type_ = node_df['type']
-    num_nodes=56944
-    adj_list={}
-    freq={}
-    dist_in_graph={}
-    centralityev=[0]*num_nodes
-    centralityd=[0]*num_nodes
-    centralitybtw=[0]*num_nodes
-    centralityh=[0]*num_nodes
+    centralityev = [0] * num_nodes
+    centralityd = list(node_df['degreec'])
+    centralitybtw = [0] * num_nodes
+    centralityh = list(node_df['harmonicc'])
     if random_walk:
         print("Random Walk Samples")
-        for i,row in node_df.iterrows():
-            node=int(row['nodes'])
-            adj_list[node]=format_dic(row['randomwalkneigh'])
-            freq[node]=format_dic2(row['freq_in_randomwalk'])
-            dist_in_graph[node]=format_dic2(row['dist_in_graph'])
-            centralityd[node]=row['degreec']
-            centralityh[node]=row['harmonicc']
-        adj_list=remove_self(adj_list)
+        for i, row in node_df.iterrows():
+            node = int(row['nodes'])
+            adj_list[node] = format_dic(row['randomwalkneigh'])
+            freq[node] = format_dic2(row['freq_in_randomwalk'])
+            dist_in_graph[node] = format_dic2(row['dist_in_graph'])
+        adj_list = remove_self(adj_list)
     if not random_walk:
         print("K-Hop Neighbours")
-        for i,row in node_df.iterrows():
-            node=int(row['nodes'])
-            centralityd[node]=row['degreec']
-            centralityh[node]=row['harmonicc']
-            adj_list[node]=set()
-            freq[node]=format_dic2(row['freq_in_randomwalk'])
-            dist_in_graph[node]=format_dic2(row['dist_in_graph'])
+        if teleport_khop or augment_khop:
+            print('creating lsh')
+            lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
+                                                 num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
+                                                 atleast=lsh_helper['atleast'],
+                                                 search_radius=lsh_helper['search_radius'])
+            print('done')
+        else:
+            lsh_cand_dic = {}
+        for i, row in node_df.iterrows():
+            node = int(row['nodes'])
+            adj_list[node] = set()
+            if augment_khop:
+                if np.all((feat_data[node] == 0)):
+                    lsh_neighbourlist_dic[node] = []
+                else:
+                    lsh_neighbourlist_dic[node] = list(lsh_cand_dic[node].keys())
+
         for edge in data['links']:
             adj_list[int(edge['source'])].add(int(edge['target']))
             adj_list[int(edge['target'])].add(int(edge['source']))
-        for key in adj_list.keys():
-            for item in adj_list[key]:
-                if item not in freq[key].keys():
-                  freq[key][int(item)]=0
-                if item not in dist_in_graph[key].keys():
-                  dist_in_graph[key][int(item)]=1
-    train_mask,val_mask,test_mask = [],[],[]
+
+        if teleport_khop:
+            adj_list = Do_Teleport_Khop(adj_list=adj_list, lsh_cand_dic=lsh_cand_dic, feats=feat_data, dfactor=dfactor)
+
+    train_mask, val_mask, test_mask = [], [], []
     for t in type_:
         if t == 'train':
             train_mask.append(True)
@@ -544,4 +568,9 @@ def load_ppi(random_walk=False,root_folder='/home/thummala/graph-datasets/Datase
             val_mask.append(False)
         else:
             print('problem in type_')
-    return feat_data,labels,adj_list,train_mask,test_mask,val_mask,distances,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd
+    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_list, 'train_mask': train_mask,
+                       'test_mask': test_mask, 'val_mask': val_mask, 'distances': distances,
+                       'cluster_labels': cluster_labels, 'freq': freq, 'dist_in_graph': dist_in_graph,
+                       'centralityev': centralityev, 'centralitybtw': centralitybtw, 'centralityh': centralityh,
+                       'centralityd': centralityd, 'lsh_neighbour_list': lsh_neighbourlist_dic}
+    return data_loader_dic

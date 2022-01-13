@@ -11,7 +11,7 @@ class Encoder(nn.Module):
             embed_dim, adj_lists, aggregator,
             num_sample=10,
             base_model=None, gcn=False, cuda=False,feature_labels=None,distance=None,
-            feature_transform=False, lsh_neighbours = None, n_lsh_neighbours = 5, lsh_augment=False):
+            feature_transform=False, lsh_neighbours = None, n_lsh_neighbours = None, lsh_augment=False):
         super(Encoder, self).__init__()
         self.feature_labels=feature_labels
         self.distance=distance
