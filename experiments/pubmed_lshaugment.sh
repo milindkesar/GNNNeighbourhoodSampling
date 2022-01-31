@@ -1,0 +1,25 @@
+## Naming Convention --> ## Naming Convention --> lshaugment_neighbours1_neighbours2_lshneighbourssample_nlayer_numlshneighbours_atleast_searchradius
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_5_2_10_true_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 2 --atleast True --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_10_2_10_true_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 2 --atleast True --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_20_2_20_true_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 20 --search_radius 2 --atleast True --num_lsh_neighbours 20 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_10_2_10_false_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 2 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_5_2_10_false_2 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 2 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_5_2_10_false_1 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 1 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_10_2_10_false_1 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 1 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_na_2_10_false_2 --n_layers 2 --includenodefeats no --augment_khop True --search_radius 2 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_na_2_10_false_1 --n_layers 2 --includenodefeats no --augment_khop True --search_radius 1 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_5_2_10_false_0 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 5 --search_radius 0 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_10_2_10_false_0 --n_layers 2 --includenodefeats no --augment_khop True --n_lsh_neighbours_sample 10 --search_radius 0 --atleast False --num_lsh_neighbours 10 --save_predictions True
+
+python -m graphsage.main --dataset pubmed --epochs 150 --rand_walk False --neighbours1 20 --neighbours2 20 --aggregator mean --attention normal --iter 1 --outdir /home/thummala/graphsage-pytorch/res/pubmed/lshaugment_20_20_na_2_10_false_0 --n_layers 2 --includenodefeats no --augment_khop True --search_radius 0 --atleast False --num_lsh_neighbours 10 --save_predictions True

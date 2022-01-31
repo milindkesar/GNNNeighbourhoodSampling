@@ -13,6 +13,7 @@ from sklearn.metrics import f1_score
 from graphsage.walkshelper import generate_featureteleportwalks, generate_clusterteleportwalks
 import random
 from graphsage.lsh import train_lsh,get_nearest_neighbors
+from graphsage.aggregators import MeanAggregator
 
 ## Helper function for calculating F1 Score
 def F1_score(y_true, y_pred):
@@ -90,7 +91,10 @@ def construct_agg(dir=None):
             out.write(json.dumps(item)+'\n')
     with open(dir+'/agg'+'/best.txt','a+') as out:
         out.write(json.dumps(best_test_f1))
-def custom_load_cora():
+
+
+def load_cora(lsh_helper, random_walk=False, root_folder='/home/thummala/graphsage-pytorch/datasets/cora',
+              teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2):
     def give_freq(t2):
         frequency = {}
 
@@ -116,10 +120,7 @@ def custom_load_cora():
                     unique2.append(int(neigh))
             unique = set(unique2)
             freq2 = give_freq(unique2)
-            # print(freq2)
-            # print(unique)
             adj_lists[int(key)] = unique
-            #print(adj_lists[key])
             freq[int(key)] = freq2
         return freq, adj_lists
 
@@ -127,8 +128,6 @@ def custom_load_cora():
         kmeans = pickle.load(open(path, "rb"))
         centroids = kmeans.cluster_centers_
         distances = {}
-        # print(set(kmeans.labels_))
-        # print(centroids)
         for i, c1 in enumerate(centroids):
             for j, c2 in enumerate(centroids):
                 if not (i == j):
@@ -138,126 +137,188 @@ def custom_load_cora():
         feature_labels = kmeans.labels_
         return feature_labels, distances
 
-    feature_labels, distances = generate_bias('/home/thummala/graphsage-pytorch/graphsage/corakmeans_7.pkl')
-
-    with open("/home/thummala/graphsage-pytorch/cora/Corawalks_10_30_1_1.json", "r") as outfile:
-        mydic2 = json.load(outfile)
-    freq, adj_lists2 = get_adj_list(mydic2)
-    with open("/home/thummala/graphsage-pytorch/cora/CoraDist_10_30_1_1.json","r") as outfile:
-        dist_in_graph = json.load(outfile)
+    freq = {}
+    dist_in_graph = {}
+    ##Defining number of nodes etc
     num_nodes = 2708
     num_feats = 1433
     feat_data = np.zeros((num_nodes, num_feats))
-    labels = np.empty((num_nodes,1), dtype=np.int64)
+    labels = np.empty((num_nodes, 1), dtype=np.int64)
     node_map = {}
     label_map = {}
     degrees = []
-    with open("/home/thummala/graphsage-pytorch/cora/cora.content") as fp:
-        for i,line in enumerate(fp):
+    lsh_neighbourlist_dic = {}
+
+    with open(root_folder + "/cora.content") as fp:
+        for i, line in enumerate(fp):
             info = line.strip().split()
-            feat_data[i,:] = list(map(float, info[1:-1]))
+            feat_data[i, :] = list(map(float, info[1:-1]))
             node_map[info[0]] = i
             if not info[-1] in label_map:
                 label_map[info[-1]] = len(label_map)
             labels[i] = label_map[info[-1]]
-    for i in range(num_nodes):
-        degrees.append(len(list(adj_lists2[i])))
-    return feat_data, labels, adj_lists2,dist_in_graph,freq,feature_labels, distances,degrees
+    if use_centroid == True:
+        cluster_labels, distances = generate_bias('/home/thummala/graphsage-pytorch/graphsage/corakmeans_7.pkl')
+    else:
+        cluster_labels = []
+        distances = []
 
-## Function to load cora in the hop fashion
-def custom_load_cora2():
-    def load_cora():
-        num_nodes = 2708
-        num_feats = 1433
-        feat_data = np.zeros((num_nodes, num_feats))
-        labels = np.empty((num_nodes, 1), dtype=np.int64)
-        node_map = {}
-        label_map = {}
-        with open("/home/thummala/graphsage-pytorch/cora/cora.content") as fp:
-            for i, line in enumerate(fp):
-                info = line.strip().split()
-                feat_data[i, :] = list(map(float, info[1:-1]))
-                node_map[info[0]] = i
-                if not info[-1] in label_map:
-                    label_map[info[-1]] = len(label_map)
-                labels[i] = label_map[info[-1]]
+    if teleport_khop or augment_khop:
+        print('creating lsh')
+        lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
+                                             num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
+                                             atleast=lsh_helper['atleast'], search_radius=lsh_helper['search_radius'])
+        print('done')
+    else:
+        lsh_cand_dic = {}
 
+    if random_walk:
+        with open(root_folder + "/Corawalks_10_30_1_1.json", "r") as outfile:
+            mydic2 = json.load(outfile)
+        freq, adj_lists = get_adj_list(mydic2)
+        with open(root_folder + "/CoraDist_10_30_1_1.json", "r") as outfile:
+            dist_in_graph = json.load(outfile)
+    else:
         adj_lists = defaultdict(set)
-        with open("/home/thummala/graphsage-pytorch/cora/cora.cites") as fp:
+        with open(root_folder + "/cora.cites") as fp:
             for i, line in enumerate(fp):
                 info = line.strip().split()
                 paper1 = node_map[info[0]]
                 paper2 = node_map[info[1]]
                 adj_lists[paper1].add(paper2)
                 adj_lists[paper2].add(paper1)
-        return feat_data, labels, adj_lists
 
-    feat_data, labels, adj_lists2 = load_cora()
-    freq={}
-    dist_in_graph={}
-    for key in adj_lists2.keys():
-        unique={}
-        unique2={}
-        for item in adj_lists2[key]:
-            unique[int(item)]=1
-            unique2[str(item)]=1
-        freq[int(key)]=unique
-        dist_in_graph[str(key)]=unique2
-    def generate_bias(path):
-        kmeans = pickle.load(open(path, "rb"))
-        centroids = kmeans.cluster_centers_
-        distances = {}
-        # print(set(kmeans.labels_))
-        # print(centroids)
-        for i, c1 in enumerate(centroids):
-            for j, c2 in enumerate(centroids):
-                if not (i == j):
-                    distances[(i, j)] = np.linalg.norm(c1 - c2)
-                else:
-                    distances[(i, j)] = 1
-        feature_labels = kmeans.labels_
-        return feature_labels, distances
+    for key, value in adj_lists.items():
+        node = int(key)
+        if augment_khop:
+            if np.all((feat_data[node] == 0)):
+                lsh_neighbourlist_dic[node] = []
+            else:
+                lsh_neighbourlist_dic[node] = list(lsh_cand_dic[node].keys())
 
-    feature_labels, distances = generate_bias('/home/thummala/graphsage-pytorch/graphsage/corakmeans_7.pkl')
+    if teleport_khop:
+        adj_lists = Do_Teleport_Khop(adj_list=adj_lists, lsh_cand_dic=lsh_cand_dic, feats=feat_data, dfactor=dfactor)
 
-    with open("/home/thummala/graphsage-pytorch/cora/Corawalks_10_30_1_1.json", "r") as outfile:
-        mydic2 = json.load(outfile)
-    num_nodes = 2708
-    num_feats = 1433
-    degrees = [0]*2708
     for i in range(num_nodes):
-        degrees[i]=len(list(adj_lists2[i]))
+        degrees.append(len(list(adj_lists[i])))
 
+    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_lists, 'train_mask': [],
+                       'test_mask': [], 'val_mask': [], 'distances': distances,
+                       'cluster_labels': cluster_labels, 'freq': freq, 'dist_in_graph': dist_in_graph,
+                       'centralityev': [], 'centralitybtw': [], 'centralityh': [],
+                       'centralityd': degrees, 'lsh_neighbour_list': lsh_neighbourlist_dic}
 
+    return data_loader_dic
 
-    return feat_data, labels, adj_lists2,dist_in_graph,freq,feature_labels, distances,degrees
 
 
 # function to return candidate nodes based on lsh
-def return_lsh_candidates(features, n_vectors=16, search_radius = 3, num_lsh_neighbours = 10, atleast = False):
-    model = train_lsh(features, n_vectors, seed=143)
+# def return_lsh_candidates(features, n_vectors=16, search_radius = 3, num_lsh_neighbours = 10, atleast = False, includeNeighbourhood = False, adj_list = None):
+#
+#     if includeNeighbourhood:
+#         neighbourhood_features = []
+#         aggregator = MeanAggregator(features=features)
+#         nodes = list(range(features.shape[0]))
+#         ##get feature vector of neighbourhood
+#         neigh_feats = aggregator.forward(nodes, [adj_list[int(node)] for node in nodes],
+#                                               num_sample=None,
+#                                               lsh_neighbours={},
+#                                               n_lsh_neighbours=None, lsh_augment=False)
+#         ##concatenate features with neigh_feats
+#         concat_features = np.concatenate((features,neigh_feats),axis = 1)
+#         model = train_lsh(concat_features, n_vectors)
+#
+#     else:
+#         model = train_lsh(features, n_vectors)
+#     ## copy feature vector for further use
+#     if includeNeighbourhood:
+#         query_vectors = np.concatenate((features,features),dim=1)
+#         features_copy= np.copy(concat_features)
+#     else:
+#         query_vectors = np.copy(features)
+#         features_copy = np.copy(features)
+#     lsh_candidates_dic = {}
+#     for item_id in range(features_copy.shape[0]):
+#         lsh_candidates_dic[item_id] = {}
+#         query_vector = query_vectors[item_id]
+#         nearest_neighbors = get_nearest_neighbors(features_copy, query_vector.reshape(1, -1), model, max_search_radius=search_radius)
+#         count = 0
+#         if atleast:
+#             if len(nearest_neighbors) < num_lsh_neighbours:
+#                 radius = search_radius + 1
+#                 while True:
+#                     nearest_neighbors = get_nearest_neighbors(features_copy, query_vector.reshape(1, -1), model, max_search_radius=radius)
+#                     if (len(nearest_neighbors) > num_lsh_neighbours) or (radius >= n_vectors//2):
+#                         break
+#                     radius = radius + 1
+#         for i, row in nearest_neighbors[:num_lsh_neighbours+1].iterrows():
+#             if count == num_lsh_neighbours:
+#                 break
+#             if int(item_id) == int(row['id']):
+#                 continue
+#             count=count+1
+#             lsh_candidates_dic[item_id][int(row['id'])] = row['similarity']
+#     return lsh_candidates_dic
+
+def return_lsh_candidates(features, n_vectors=16, search_radius=3, num_lsh_neighbours=10, atleast=False,
+                          includeNeighbourhood=False, adj_list=None):
+    if includeNeighbourhood:
+        neighbourhood_features = []
+        features_embedding = nn.Embedding(features.shape[0], features.shape[1])
+        features_embedding.weight = nn.Parameter(torch.FloatTensor(features), requires_grad=False)
+        aggregator = MeanAggregator(features=features_embedding)
+        nodes = list(range(features.shape[0]))
+        ##get feature vector of neighbourhood
+        neigh_feats = aggregator.forward(nodes, [adj_list[int(node)] for node in nodes],
+                                         num_sample=None,
+                                         lsh_neighbours={},
+                                         n_lsh_neighbours=None, lsh_augment=False)
+        neigh_feats = neigh_feats.detach().numpy()
+        print('neigh_feats shape ', neigh_feats.shape)
+        ##concatenate features with neigh_feats
+        concat_features = np.concatenate((features, neigh_feats), axis=1)
+        model = train_lsh(concat_features, n_vectors)
+
+    else:
+        model = train_lsh(features, n_vectors)
+    ## copy feature vector for further use
+    if includeNeighbourhood:
+        query_vectors = np.concatenate((features, features), axis=1)
+        features_copy = np.copy(concat_features)
+    else:
+        query_vectors = np.copy(features)
+        features_copy = np.copy(features)
+    print('features copy shape ', features_copy.shape)
     lsh_candidates_dic = {}
-    for item_id in range(features.shape[0]):
+    for item_id in range(features_copy.shape[0]):
         lsh_candidates_dic[item_id] = {}
-        query_vector = features[item_id]
-        nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=search_radius)
+        query_vector = query_vectors[item_id]
+        # print('shape of query vector',query_vector.shape)
+        nearest_neighbors = get_nearest_neighbors(features_copy, query_vector.reshape(1, -1), model,
+                                                  max_search_radius=search_radius)
         count = 0
         if atleast:
             if len(nearest_neighbors) < num_lsh_neighbours:
                 radius = search_radius + 1
                 while True:
-                    nearest_neighbors = get_nearest_neighbors(features, query_vector.reshape(1, -1), model, max_search_radius=radius)
-                    if (len(nearest_neighbors) > num_lsh_neighbours) or (radius >= n_vectors//2):
+                    nearest_neighbors = get_nearest_neighbors(features_copy, query_vector.reshape(1, -1), model,
+                                                              max_search_radius=radius)
+                    if (len(nearest_neighbors) > num_lsh_neighbours) or (radius >= n_vectors // 2):
                         break
                     radius = radius + 1
-        for i, row in nearest_neighbors[:num_lsh_neighbours+1].iterrows():
-            if count == num_lsh_neighbours:
-                break
-            if int(item_id) == int(row['id']):
-                continue
-            count=count+1
-            lsh_candidates_dic[item_id][int(row['id'])] = row['similarity']
+
+        if len(nearest_neighbors) == 0:
+            lsh_candidates_dic[item_id] = {}
+        else:
+            for i, row in nearest_neighbors[:num_lsh_neighbours + 1].iterrows():
+                if count == num_lsh_neighbours:
+                    break
+                if int(item_id) == int(row['id']):
+                    continue
+                count = count + 1
+                lsh_candidates_dic[item_id][int(row['id'])] = row['similarity']
     return lsh_candidates_dic
+
 
 # {'num_vectors':16, 'search_radius': False, 'num_lsh_neighbours': 10,'atleast': False}
 def Do_Teleport_Khop(adj_list, lsh_cand_dic, feats, dfactor):
@@ -408,15 +469,6 @@ def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, nu
     if not random_walk:
         print('loading khop neighbours')
         teleport_count = 0
-        if teleport_khop or augment_khop:
-            print('creating lsh')
-            lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
-                                                 num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
-                                                 atleast=lsh_helper['atleast'],
-                                                 search_radius=lsh_helper['search_radius'])
-            print('done')
-        else:
-            lsh_cand_dic = {}
         for i, row in node_df.iterrows():
             node = int(row['nodes'])
             adj_list[node] = set(wikics['links'][node])
@@ -424,7 +476,18 @@ def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, nu
             centralitybtw[node] = row['betweennessc']
             centralityd[node] = row['degreec']
             centralityh[node] = row['harmonicc']
-            if augment_khop:
+        if teleport_khop or augment_khop:
+            print('creating lsh')
+            lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
+                                                 num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
+                                                 atleast=lsh_helper['atleast'],
+                                                 search_radius=lsh_helper['search_radius'], includeNeighbourhood=lsh_helper['includeNeighbourhood'], adj_list=adj_list)
+            print('done')
+        else:
+            lsh_cand_dic = {}
+        if augment_khop:
+            for i, row in node_df.iterrows():
+                node = int(row['nodes'])
                 lsh_neighbourlist_dic[node] = list(lsh_cand_dic[node].keys())
         if teleport_khop:
             adj_list = Do_Teleport_Khop(adj_list=adj_list, lsh_cand_dic=lsh_cand_dic, feats=feat_data, dfactor=dfactor)
@@ -434,6 +497,68 @@ def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, nu
                          'centralityev': centralityev, 'centralitybtw': centralitybtw, 'centralityh': centralityh,
                          'centralityd': centralityd, 'lsh_neighbour_list': lsh_neighbourlist_dic}
     return wikics_loader_dic
+
+
+def custom_load_pubmed(lsh_helper, random_walk=False, root_folder='/home/thummala/graphsage-pytorch/datasets/pubmed-data',
+                teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2):
+    num_nodes = 19717
+    num_feats = 500
+    feat_data = np.zeros((num_nodes, num_feats))
+    labels = np.empty((num_nodes, 1), dtype=np.int64)
+    node_map = {}
+    degrees = []
+    lsh_neighbourlist_dic = {}
+    with open(root_folder + "/Pubmed-Diabetes.NODE.paper.tab") as fp:
+        fp.readline()
+        feat_map = {entry.split(":")[1]: i - 1 for i, entry in enumerate(fp.readline().split("\t"))}
+        for i, line in enumerate(fp):
+            info = line.split("\t")
+            node_map[info[0]] = i
+            labels[i] = int(info[1].split("=")[1]) - 1
+            for word_info in info[2:-1]:
+                word_info = word_info.split("=")
+                feat_data[i][feat_map[word_info[0]]] = float(word_info[1])
+    adj_lists = defaultdict(set)
+    with open(root_folder + "/Pubmed-Diabetes.DIRECTED.cites.tab") as fp:
+        fp.readline()
+        fp.readline()
+        for line in fp:
+            info = line.strip().split("\t")
+            paper1 = node_map[info[1].split(":")[1]]
+            paper2 = node_map[info[-1].split(":")[1]]
+            adj_lists[paper1].add(paper2)
+            adj_lists[paper2].add(paper1)
+
+    if teleport_khop or augment_khop:
+        print('creating lsh')
+        lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
+                                             num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
+                                             atleast=lsh_helper['atleast'], search_radius=lsh_helper['search_radius'])
+        print('done')
+    else:
+        lsh_cand_dic = {}
+
+    for key, value in adj_lists.items():
+        node = int(key)
+        if augment_khop:
+            if np.all((feat_data[node] == 0)):
+                lsh_neighbourlist_dic[node] = []
+            else:
+                lsh_neighbourlist_dic[node] = list(lsh_cand_dic[node].keys())
+
+    if teleport_khop:
+        adj_lists = Do_Teleport_Khop(adj_list=adj_lists, lsh_cand_dic=lsh_cand_dic, feats=feat_data, dfactor=dfactor)
+
+    for i in range(num_nodes):
+        degrees.append(len(list(adj_lists[i])))
+
+    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_lists, 'train_mask': [],
+                       'test_mask': [], 'val_mask': [], 'distances': [],
+                       'cluster_labels': [], 'freq': {}, 'dist_in_graph': {},
+                       'centralityev': [], 'centralitybtw': [], 'centralityh': [],
+                       'centralityd': degrees, 'lsh_neighbour_list': lsh_neighbourlist_dic}
+
+    return data_loader_dic
 
 
 ## Loader for ppi

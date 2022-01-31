@@ -89,6 +89,10 @@ def get_nearest_neighbors(X_tfidf, query_vector, model, max_search_radius=3):
     candidate_list = list(candidate_set)
     candidates = X_tfidf[candidate_list]
     #print(candidates.shape, query_vector.shape)
+
+    if candidate_list == []:
+        print('empty candidate list')
+        return []
     distance = pairwise_distances(candidates, query_vector, metric='cosine').flatten()
     
     distance_col = 'similarity'
