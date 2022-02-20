@@ -228,49 +228,54 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
 
 ### Helper function to run the model for a given dataset
 def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = None, augment_khop=False, includeNeighbourhood = False):
-    classification='normal'
-    print("random walk",rw)
-    lsh_helper = {'n_vectors': n_vectors, 'search_radius': search_radius, 'num_lsh_neighbours': num_lsh_neigbours,'atleast': atleast, 'includeNeighbourhood':includeNeighbourhood}
-    if augment_khop or teleport_khop:
-        print('lsh to be constructed with ', lsh_helper)
-    ## Loading dataset
-    if name == 'wikics':
-        data_dic = load_wikics(lsh_helper, random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
-        #feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
-        data_dic['feat_data']=np.array(data_dic['feat_data'])
-        data_dic['labels'] = np.array(data_dic['labels'])
-    if name == 'ppi':
-        data_dic = load_ppi(lsh_helper, random_walk=rw,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor,augment_khop = augment_khop)
-        #feat_data,labels,adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd = load_ppi(random_walk=rw)
-        classification='multi_label'
-    if name == 'cora':
-        data_dic = load_cora(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
-    if name == 'pubmed':
-        data_dic = custom_load_pubmed(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
+    for k in range(random_iter):
+        classification='normal'
+        print("random walk",rw)
+        lsh_helper = {'n_vectors': n_vectors, 'search_radius': search_radius, 'num_lsh_neighbours': num_lsh_neigbours,'atleast': atleast, 'includeNeighbourhood':includeNeighbourhood}
+        if augment_khop or teleport_khop:
+            print('lsh to be constructed with ', lsh_helper)
+            print('lsh neighbours to sample per node',n_lsh_neighbours_sample)
+            print('include neighbourhood (in LSH) ',includeNeighbourhood)
+        ## Loading dataset
+
+        if name == 'wikics':
+            data_dic = load_wikics(lsh_helper, random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
+            #feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
+            data_dic['feat_data']=np.array(data_dic['feat_data'])
+            data_dic['labels'] = np.array(data_dic['labels'])
+        if name == 'ppi':
+            data_dic = load_ppi(lsh_helper, random_walk=rw,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor,augment_khop = augment_khop)
+            #feat_data,labels,adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd = load_ppi(random_walk=rw)
+            classification='multi_label'
+        if name == 'cora':
+            data_dic = load_cora(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
+        if name == 'pubmed':
+            data_dic = custom_load_pubmed(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
 
 
 
-    ## Defining some useful terms (such as features, number of classes, etc.)
-    num_nodes = data_dic['feat_data'].shape[0]
-    features = nn.Embedding(data_dic['feat_data'].shape[0],data_dic['feat_data'].shape[1])
-    features.weight = nn.Parameter(torch.FloatTensor(data_dic['feat_data']), requires_grad=False)
-    n1 = neighbours1
-    n2 = neighbours2
-    n_lsh_neighbours = n_lsh_neighbours_sample
-    num_feats=data_dic['feat_data'].shape[1]
-    n_layers = n_layers
-    if name=='ppi':
-        n_classes=121
-    else:
-        unique_labels=np.unique(data_dic['labels'])
-        n_classes = len(unique_labels)
-    epochs=epochs
+        ## Defining some useful terms (such as features, number of classes, etc.)
+        num_nodes = data_dic['feat_data'].shape[0]
+        features = nn.Embedding(data_dic['feat_data'].shape[0],data_dic['feat_data'].shape[1])
+        features.weight = nn.Parameter(torch.FloatTensor(data_dic['feat_data']), requires_grad=False)
+        n1 = neighbours1
+        n2 = neighbours2
+        n_lsh_neighbours = n_lsh_neighbours_sample
+        num_feats=data_dic['feat_data'].shape[1]
+        n_layers = n_layers
+        rand_split = 1
+        if name=='ppi':
+            n_classes=121
+        else:
+            unique_labels=np.unique(data_dic['labels'])
+            n_classes = len(unique_labels)
+        epochs=epochs
 
-    print("aggregator is :",aggregator)
-    print("using softmax attention :",attention)
+        print("aggregator is :",aggregator)
+        print("using softmax attention :",attention)
 
     ## Training Loop
-    for k in range(random_iter):
+
 
         ## Using Mean Aggregator
         if aggregator == 'mean':
@@ -326,6 +331,7 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         os.makedirs(out_dir, exist_ok=True)
         ## To see if predefined splits exist (Otherwise use random splits (As of Now: 0.7 train, 0.2 test, 0.1 val))
         if data_dic['train_mask'] != []:
+            rand_split=0
             test = np.array([i for i, x in enumerate(data_dic['test_mask']) if x])
             val = np.array([i for i, x in enumerate(data_dic['val_mask']) if x])
             train = np.array([i for i, x in enumerate(data_dic['train_mask']) if x])
@@ -334,6 +340,8 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
             print('val',val.shape)
             print('train',train.shape)
         elif name == 'cora':
+            if save_predictions:
+                np.random.seed(1)
             rand_indices = np.random.permutation(num_nodes)
             test = rand_indices[:1500]
             val = rand_indices[1500:2000]
@@ -373,6 +381,9 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
                         #val_losses.append(val_loss.data)
             end_time = time.time()
             times.append(end_time - start_time)
+            # if epoch == 0:
+            #     print("layer 1 lsh neighbours added on average ", agg1.average_lsh_added / agg1.count, agg1.count)
+            #     print("layer 2 lsh neighbours added on average", agg2.average_lsh_added/agg2.count, agg2.count)
             with torch.no_grad():
                 graphsage.eval()
                 val_loss = graphsage.loss(val_nodes, Variable(torch.LongTensor(labels[np.array(val_nodes)])),classification)
@@ -396,6 +407,10 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         np.save(outdir+'/predictions.npy', predicted_scores)
         embeds = graphsage.returnembedding(test).detach().t().numpy()
         np.save(outdir+'/embeddings.npy', embeds)
+        if rand_split:
+            np.save(outdir+'/test.npy',np.array(test))
+            np.save(outdir+'/train.npy',np.array(train))
+            np.save(outdir+'/val.npy',np.array(val))
 
     ## Helper code to write the best results and mean results of multiple iterations
     if random_iter == 1:

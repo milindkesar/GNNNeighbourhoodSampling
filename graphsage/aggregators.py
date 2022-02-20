@@ -157,6 +157,8 @@ class MeanAggregator(nn.Module):
 
         self.feature_labels = feature_labels
         self.distance=distance
+        self.average_lsh_added = 0
+        self.count = 0
     def forward(self, nodes, to_neighs, num_sample=10, lsh_neighbours = {}, n_lsh_neighbours = None, lsh_augment=False):
         """
         nodes --- list of nodes in a batch
@@ -165,6 +167,10 @@ class MeanAggregator(nn.Module):
         """
         # Local pointers to functions (speed hack)
         #print("gcn ", self.gcn)
+        ## return elements of list1 not in list2
+        def get_absent_elements(list1, list2):
+            res_set = list1 - list2
+            return list(res_set)
         def custom_sampler():
             bias=[]
             samp_neighs=[]
@@ -202,17 +208,29 @@ class MeanAggregator(nn.Module):
                             num_sample,
                             )) if len(to_neigh) >= num_sample else to_neigh for to_neigh in to_neighs]
                 for index, item in enumerate(samp_neighs):
+                    in_len = len(samp_neighs[index])
                     if (not n_lsh_neighbours is None):
-                        samp_neighs[index].update(lsh_neighbours[index][:n_lsh_neighbours])
+                        res_list = get_absent_elements(set(lsh_neighbours[index]),samp_neighs[index])
+                        samp_neighs[index].update(res_list[:n_lsh_neighbours])
                     else:
                         samp_neighs[index].update(lsh_neighbours[index])
+                    ## length after updating
+                    res_len = len(samp_neighs[index])
+                    self.count += 1
+                    self.average_lsh_added += res_len - in_len
+
             else:
                 samp_neighs = to_neighs
                 for index, item in enumerate(samp_neighs):
+                    in_len = len(samp_neighs[index])
                     if (not n_lsh_neighbours is None):
                         samp_neighs[index].update(lsh_neighbours[index][:n_lsh_neighbours])
                     else:
                         samp_neighs[index].update(lsh_neighbours[index])
+                    ## length after updating
+                    res_len = len(samp_neighs[index])
+                    self.count += 1
+                    self.average_lsh_added += res_len - in_len
         elif not num_sample is None:
             _sample = random.sample
             samp_neighs = [_set(_sample(to_neigh,
