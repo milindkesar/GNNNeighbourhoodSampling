@@ -261,8 +261,16 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         num_nodes = data_dic['feat_data'].shape[0]
         features = nn.Embedding(data_dic['feat_data'].shape[0],data_dic['feat_data'].shape[1])
         features.weight = nn.Parameter(torch.FloatTensor(data_dic['feat_data']), requires_grad=False)
-        n1 = neighbours1
-        n2 = neighbours2
+
+        ## to ensure no sampling (if -1 is neighbours 1 or neighbours 2):
+        if neighbours1 == -1:
+            n1 = None
+        else:
+            n1 = neighbours1
+        if neighbours2 == -1:
+            n2 = None
+        else:
+            n2 = neighbours2
         n_lsh_neighbours = n_lsh_neighbours_sample
         num_feats=data_dic['feat_data'].shape[1]
         n_layers = n_layers
