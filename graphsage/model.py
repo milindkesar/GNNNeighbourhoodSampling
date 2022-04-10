@@ -10,10 +10,10 @@ import random
 from sklearn.metrics import f1_score,accuracy_score
 from collections import defaultdict
 import os
-from graphsage.encoders import Encoder
-from graphsage.aggregators import MeanAggregator, Aggregator1
+from graphsage.encoders import Encoder, LSHNeighboursEncoder
+from graphsage.aggregators import MeanAggregator, Aggregator1, PureMeanAggregator
 from graphsage.utils import myfunc,load_data
-from graphsage.utils2 import load_cora,load_wikics,construct_agg, load_ppi, F1_score, custom_load_pubmed
+from graphsage.utils2 import load_cora,load_wikics,construct_agg, load_ppi, F1_score, custom_load_pubmed, get_average_lsh_added
 import pickle
 import json
 
@@ -227,8 +227,10 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
         out.write(json.dumps(results)+'\n')
 
 ### Helper function to run the model for a given dataset
-def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = None, augment_khop=False, includeNeighbourhood = False):
+def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = None, augment_khop=False, includeNeighbourhood = False, gcn = False, load_embeds=False):
     for k in range(random_iter):
+        if gcn:
+            print("Using gcn formulation")
         classification='normal'
         print("random walk",rw)
         lsh_helper = {'n_vectors': n_vectors, 'search_radius': search_radius, 'num_lsh_neighbours': num_lsh_neigbours,'atleast': atleast, 'includeNeighbourhood':includeNeighbourhood}
@@ -239,21 +241,22 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         ## Loading dataset
 
         if name == 'wikics':
-            data_dic = load_wikics(lsh_helper, random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
+            data_dic = load_wikics(lsh_helper, random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop, load_embeds = load_embeds)
             #feat_data, labels, adj_lists, train_mask, test_mask, val_mask, distance, feature_labels, freq, dist_in_graph, centralityev, centralitybtw, centralityh, centralityd = load_wikics(random_walk=rw,type_walk=type_of_walk, p=p ,q=q,num_walks=num_walks,walk_length=walk_length,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor)
             data_dic['feat_data']=np.array(data_dic['feat_data'])
             data_dic['labels'] = np.array(data_dic['labels'])
         if name == 'ppi':
-            data_dic = load_ppi(lsh_helper, random_walk=rw,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor,augment_khop = augment_khop)
+            data_dic = load_ppi(lsh_helper, random_walk=rw,teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor,augment_khop = augment_khop, load_embeds = load_embeds)
             #feat_data,labels,adj_lists,train_mask,test_mask,val_mask,distance,feature_labels,freq,dist_in_graph,centralityev,centralitybtw,centralityh,centralityd = load_ppi(random_walk=rw)
             classification='multi_label'
         if name == 'cora':
-            data_dic = load_cora(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
+            data_dic = load_cora(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop, load_embeds = load_embeds)
         if name == 'pubmed':
             data_dic = custom_load_pubmed(lsh_helper, random_walk=rw, teleport=teleport, teleport_khop=teleport_khop, dfactor=dfactor, augment_khop=augment_khop)
 
-
-
+        if augment_khop:
+            average_lsh_add, average_lsh_add_low = get_average_lsh_added(data_dic['adj_lists'],data_dic['lsh_neighbour_list'])
+            print('average lsh added for all nodes, nodes with degree less than 5',average_lsh_add, average_lsh_add_low)
         ## Defining some useful terms (such as features, number of classes, etc.)
         num_nodes = data_dic['feat_data'].shape[0]
         features = nn.Embedding(data_dic['feat_data'].shape[0],data_dic['feat_data'].shape[1])
@@ -279,19 +282,36 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
 
         ## Using Mean Aggregator
         if aggregator == 'mean':
-            agg1 = MeanAggregator(features, cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'])
-            enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=False, cuda=False,
+            agg1 = MeanAggregator(features, cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], gcn=gcn)
+            enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=gcn, cuda=False,
                            feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], num_sample=n1,
                            lsh_neighbours=data_dic['lsh_neighbour_list'], n_lsh_neighbours=n_lsh_neighbours,
                            lsh_augment=augment_khop)
             if n_layers > 1:
                 agg2 = MeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False,
-                                      feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'])
+                                      feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], gcn=gcn)
                 enc2 = Encoder(lambda nodes: enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,
-                               base_model=enc1, gcn=False, cuda=False, feature_labels=data_dic['cluster_labels'],
+                               base_model=enc1, gcn=gcn, cuda=False, feature_labels=data_dic['cluster_labels'],
                                distance=data_dic['distances'], num_sample=n2,
                                lsh_neighbours=data_dic['lsh_neighbour_list'], n_lsh_neighbours=n_lsh_neighbours,
                                lsh_augment=augment_khop)
+                graphsage = SupervisedGraphSage(n_classes, enc2)
+            else:
+                graphsage = SupervisedGraphSage(n_classes, enc1)
+
+        ## New LSH Formulation
+        elif aggregator == 'lsh_mean':
+            agg1 = PureMeanAggregator(features, cuda=False, gcn = gcn)
+            lsh_agg1 = PureMeanAggregator(features, cuda=False, gcn=gcn)
+            enc1= LSHNeighboursEncoder(features=features, feature_dim=num_feats, embed_dim=128, adj_lists=data_dic['adj_lists'], aggregator=agg1,lsh_aggregator=lsh_agg1, num_sample=n1, gcn=gcn, cuda=False, lsh_neighbours = data_dic['lsh_neighbour_list'], n_lsh_neighbours = n_lsh_neighbours, lsh_augment=augment_khop)
+            if n_layers > 1:
+                agg2 = PureMeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False, gcn=gcn)
+                lsh_agg2 = PureMeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False, gcn=gcn)
+                enc2 = LSHNeighboursEncoder(lambda nodes: enc1(nodes).t(), feature_dim=enc1.embed_dim, embed_dim=128,
+                                            adj_lists=data_dic['adj_lists'], aggregator=agg2, lsh_aggregator=lsh_agg2,
+                                            num_sample=n2, gcn=gcn, cuda=False,
+                                            lsh_neighbours=data_dic['lsh_neighbour_list'],
+                                            n_lsh_neighbours=n_lsh_neighbours, lsh_augment=augment_khop)
                 graphsage = SupervisedGraphSage(n_classes, enc2)
             else:
                 graphsage = SupervisedGraphSage(n_classes, enc1)
@@ -304,8 +324,8 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
                                spectral=[data_dic['centralityev'], data_dic['centralitybtw'], data_dic['centralityh'],
                                          data_dic['centralityd']], dist_btwn=data_dic['dist_in_graph'],
                                adj_list=data_dic['adj_lists'], attention=attention, addnodefeats=includenodefeats,
-                               layerno=1)
-            enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=False, cuda=False,
+                               layerno=1, gcn=gcn)
+            enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=gcn, cuda=False,
                            feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], num_sample=n1)
             if n_layers > 1:
                 agg2 = Aggregator1(lambda nodes: enc1(nodes).t(), cuda=False, feature_labels=data_dic['cluster_labels'],
@@ -313,9 +333,9 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
                                    spectral=[data_dic['centralityev'], data_dic['centralitybtw'],
                                              data_dic['centralityh'], data_dic['centralityd']],
                                    dist_btwn=data_dic['dist_in_graph'], adj_list=data_dic['adj_lists'],
-                                   attention=attention, addnodefeats=includenodefeats, layerno=2)
+                                   attention=attention, addnodefeats=includenodefeats, layerno=2, gcn = gcn)
                 enc2 = Encoder(lambda nodes: enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,
-                               base_model=enc1, gcn=False, cuda=False, feature_labels=data_dic['cluster_labels'],
+                               base_model=enc1, gcn=gcn, cuda=False, feature_labels=data_dic['cluster_labels'],
                                distance=data_dic['distances'], num_sample=n2)
                 graphsage = SupervisedGraphSage(n_classes, enc2)
             else:
@@ -407,6 +427,21 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         np.save(outdir+'/predictions.npy', predicted_scores)
         embeds = graphsage.returnembedding(test).detach().t().numpy()
         np.save(outdir+'/embeddings.npy', embeds)
+        ## save embeddings for all nodes using GS
+        nodes = np.arange(num_nodes)
+        batch_size = 512
+        ind = 0
+        for batch in range(0, len(nodes), batch_size):
+            batch_nodes = nodes[batch:batch + batch_size]
+            batch_embeds = graphsage.returnembedding(np.array(batch_nodes)).detach().t().numpy()
+            # batch_embeds = np.random.rand(len(batch_nodes),128)
+            if ind == 0:
+                allnodesembeds = batch_embeds
+            else:
+                allnodesembeds = np.append(allnodesembeds, batch_embeds, axis=0)
+            ind += 1
+        # allnodesembeds = graphsage.returnembedding(np.arange(num_nodes)).detach().t().numpy()
+        np.save(outdir+'/allnodeembeddings.npy',allnodesembeds)
         if rand_split:
             np.save(outdir+'/test.npy',np.array(test))
             np.save(outdir+'/train.npy',np.array(train))
@@ -417,6 +452,11 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         pass
     else:
         construct_agg(outdir)
+
+    if augment_khop:
+        file = open(outdir+"/otherstats.txt", "w")
+        file.write("Average LSH added for all nodes = " + str(average_lsh_add) + "\n" + "Average LSH added for nodes with degree less than 5 = " + str(average_lsh_add_low))
+        file.close()
         # val_output = graphsage.forward(val)
         # test_output = graphsage.forward(test)
         # valid_f1 = f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro")

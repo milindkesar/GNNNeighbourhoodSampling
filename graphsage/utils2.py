@@ -14,6 +14,7 @@ from graphsage.walkshelper import generate_featureteleportwalks, generate_cluste
 import random
 from graphsage.lsh import train_lsh,get_nearest_neighbors
 from graphsage.aggregators import MeanAggregator
+from graphsage.planetoid import load_data
 
 ## Helper function for calculating F1 Score
 def F1_score(y_true, y_pred):
@@ -23,6 +24,16 @@ def F1_score(y_true, y_pred):
     # for i in range(121):
     #     sum+= f1_score(y_true[:,i],y_pred[:,i],average="micro")
     return f1_score(y_true, y_pred, average="micro")
+
+
+def get_average_lsh_added(adj_list, lsh_neighbours):
+    average_for_lowdeg=[]
+    average_added = []
+    for node, neighbours in adj_list.items():
+        if len(neighbours) < 5:
+            average_for_lowdeg.append(len(set(lsh_neighbours[node])-set(adj_list[node])))
+        average_added.append(len(set(lsh_neighbours[node])-set(adj_list[node])))
+    return sum(average_added)/len(average_added), sum(average_for_lowdeg)/len(average_for_lowdeg)
 
 ## Helper function to get length of masks
 def count_train_test_val(myarr):
@@ -94,7 +105,7 @@ def construct_agg(dir=None):
 
 
 def load_cora(lsh_helper, random_walk=False, root_folder='/home/thummala/graphsage-pytorch/datasets/cora',
-              teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2):
+              teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2, planetoid = True, load_embeds = False):
     def give_freq(t2):
         frequency = {}
 
@@ -147,28 +158,40 @@ def load_cora(lsh_helper, random_walk=False, root_folder='/home/thummala/graphsa
     node_map = {}
     label_map = {}
     degrees = []
+    train_mask = []
+    test_mask = []
+    val_mask = []
     lsh_neighbourlist_dic = {}
-
-    with open(root_folder + "/cora.content") as fp:
-        for i, line in enumerate(fp):
-            info = line.strip().split()
-            feat_data[i, :] = list(map(float, info[1:-1]))
-            node_map[info[0]] = i
-            if not info[-1] in label_map:
-                label_map[info[-1]] = len(label_map)
-            labels[i] = label_map[info[-1]]
+    if planetoid:
+        print("Using planetoid split")
+        adj_lists, feat_data, labels, train_mask, val_mask, test_mask = load_data('cora')
+    else:
+        with open(root_folder + "/cora.content") as fp:
+            for i, line in enumerate(fp):
+                info = line.strip().split()
+                feat_data[i, :] = list(map(float, info[1:-1]))
+                node_map[info[0]] = i
+                if not info[-1] in label_map:
+                    label_map[info[-1]] = len(label_map)
+                labels[i] = label_map[info[-1]]
     if use_centroid == True:
         cluster_labels, distances = generate_bias('/home/thummala/graphsage-pytorch/graphsage/corakmeans_7.pkl')
     else:
         cluster_labels = []
         distances = []
-
+    if load_embeds:
+        if not planetoid:
+            feat_data = np.load('/home/thummala/graphsage-pytorch/res/cora/gswithembeds/allnodeembeddings.npy')
+            print('loading gs embeddings as node features ', feat_data.shape)
+        else:
+            feat_data = np.load('/home/thummala/graphsage-pytorch/res/cora/gsplanetoid_2020/allnodeembeddings.npy')
+            print('loading gs embeddings as node features ', feat_data.shape)
     if teleport_khop or augment_khop:
         print('creating lsh')
         lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
                                              num_lsh_neighbours=lsh_helper['num_lsh_neighbours'],
                                              atleast=lsh_helper['atleast'], search_radius=lsh_helper['search_radius'])
-        print('done')
+        print('done', lsh_cand_dic[0])
     else:
         lsh_cand_dic = {}
 
@@ -179,31 +202,31 @@ def load_cora(lsh_helper, random_walk=False, root_folder='/home/thummala/graphsa
         with open(root_folder + "/CoraDist_10_30_1_1.json", "r") as outfile:
             dist_in_graph = json.load(outfile)
     else:
-        adj_lists = defaultdict(set)
-        with open(root_folder + "/cora.cites") as fp:
-            for i, line in enumerate(fp):
-                info = line.strip().split()
-                paper1 = node_map[info[0]]
-                paper2 = node_map[info[1]]
-                adj_lists[paper1].add(paper2)
-                adj_lists[paper2].add(paper1)
-
-    for key, value in adj_lists.items():
-        node = int(key)
-        if augment_khop:
+        if not planetoid:
+            print("Not using planetoid split")
+            adj_lists = defaultdict(set)
+            with open(root_folder + "/cora.cites") as fp:
+                for i, line in enumerate(fp):
+                    info = line.strip().split()
+                    paper1 = node_map[info[0]]
+                    paper2 = node_map[info[1]]
+                    adj_lists[paper1].add(paper2)
+                    adj_lists[paper2].add(paper1)
+    if augment_khop:
+        for key, value in adj_lists.items():
+            node = int(key)
             if np.all((feat_data[node] == 0)):
                 lsh_neighbourlist_dic[node] = []
             else:
                 lsh_neighbourlist_dic[node] = list(lsh_cand_dic[node].keys())
-
     if teleport_khop:
         adj_lists = Do_Teleport_Khop(adj_list=adj_lists, lsh_cand_dic=lsh_cand_dic, feats=feat_data, dfactor=dfactor)
 
     for i in range(num_nodes):
         degrees.append(len(list(adj_lists[i])))
 
-    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_lists, 'train_mask': [],
-                       'test_mask': [], 'val_mask': [], 'distances': distances,
+    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_lists, 'train_mask': train_mask,
+                       'test_mask': test_mask, 'val_mask': val_mask, 'distances': distances,
                        'cluster_labels': cluster_labels, 'freq': freq, 'dist_in_graph': dist_in_graph,
                        'centralityev': [], 'centralitybtw': [], 'centralityh': [],
                        'centralityd': degrees, 'lsh_neighbour_list': lsh_neighbourlist_dic}
@@ -359,7 +382,7 @@ def Do_Teleport_Khop(adj_list, lsh_cand_dic, feats, dfactor):
 ## Loader for wikics
 def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, num_walks=10, walk_length=10,
                 teleport=0.2, workers=1,
-                teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False):
+                teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, load_embeds = False):
     # function to format neighbours in random walk dic stored as string
     print("Loading WikiCS")
     wikics_loader_dic = {}
@@ -437,6 +460,9 @@ def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, nu
         print('Specify correct type:- default, clusterteleport or featureteleport-->loading default now')
         node_df = pd.read_csv(root_folder + '/wikics_nodeinfo.csv')
     feat_data = wikics['features']
+    if load_embeds:
+        feat_data = np.load('/home/thummala/graphsage-pytorch/res/wikics/gs_2020_final/allnodeembeddings.npy')
+        print('loading gs embeddings as node features ',feat_data.shape)
     labels = wikics['labels']
     train_mask, val_mask, test_mask = wikics['train_masks'][10], wikics['val_masks'][10], wikics['test_mask']
     centralityev = [0] * len(train_mask)
@@ -500,35 +526,67 @@ def load_wikics(lsh_helper, random_walk=False, type_walk='default', p=1, q=1, nu
 
 
 def custom_load_pubmed(lsh_helper, random_walk=False, root_folder='/home/thummala/graphsage-pytorch/datasets/pubmed-data',
-                teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2):
+                teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2, planetoid = True, load_embeds = True):
     num_nodes = 19717
     num_feats = 500
     feat_data = np.zeros((num_nodes, num_feats))
     labels = np.empty((num_nodes, 1), dtype=np.int64)
     node_map = {}
     degrees = []
+    train_mask = []
+    test_mask = []
+    val_mask = []
     lsh_neighbourlist_dic = {}
-    with open(root_folder + "/Pubmed-Diabetes.NODE.paper.tab") as fp:
-        fp.readline()
-        feat_map = {entry.split(":")[1]: i - 1 for i, entry in enumerate(fp.readline().split("\t"))}
-        for i, line in enumerate(fp):
-            info = line.split("\t")
-            node_map[info[0]] = i
-            labels[i] = int(info[1].split("=")[1]) - 1
-            for word_info in info[2:-1]:
-                word_info = word_info.split("=")
-                feat_data[i][feat_map[word_info[0]]] = float(word_info[1])
-    adj_lists = defaultdict(set)
-    with open(root_folder + "/Pubmed-Diabetes.DIRECTED.cites.tab") as fp:
-        fp.readline()
-        fp.readline()
-        for line in fp:
-            info = line.strip().split("\t")
-            paper1 = node_map[info[1].split(":")[1]]
-            paper2 = node_map[info[-1].split(":")[1]]
-            adj_lists[paper1].add(paper2)
-            adj_lists[paper2].add(paper1)
-
+    if planetoid:
+        adj_lists, feat_data, labels, train_mask, val_mask, test_mask = load_data('pubmed')
+    else:
+        with open(root_folder + "/Pubmed-Diabetes.NODE.paper.tab") as fp:
+            fp.readline()
+            feat_map = {entry.split(":")[1]: i - 1 for i, entry in enumerate(fp.readline().split("\t"))}
+            for i, line in enumerate(fp):
+                info = line.split("\t")
+                node_map[info[0]] = i
+                labels[i] = int(info[1].split("=")[1]) - 1
+                for word_info in info[2:-1]:
+                    word_info = word_info.split("=")
+                    feat_data[i][feat_map[word_info[0]]] = float(word_info[1])
+        adj_lists = defaultdict(set)
+        with open(root_folder + "/Pubmed-Diabetes.DIRECTED.cites.tab") as fp:
+            fp.readline()
+            fp.readline()
+            for line in fp:
+                info = line.strip().split("\t")
+                paper1 = node_map[info[1].split(":")[1]]
+                paper2 = node_map[info[-1].split(":")[1]]
+                adj_lists[paper1].add(paper2)
+                adj_lists[paper2].add(paper1)
+        print('using random splits...')
+        np.random.seed(1)
+        rand_indices = np.random.permutation(num_nodes)
+        test = rand_indices[:int(0.2 * num_nodes)]
+        val = rand_indices[int(0.2 * num_nodes):int(0.3 * num_nodes)]
+        train = list(rand_indices[int(0.3 * num_nodes):])
+        for node in range(num_nodes):
+            if node in train:
+                train_mask.append(True)
+                val_mask.append(False)
+                test_mask.append(False)
+            elif node in val:
+                train_mask.append(False)
+                val_mask.append(True)
+                test_mask.append(False)
+            elif node in test:
+                train_mask.append(False)
+                val_mask.append(False)
+                test_mask.append(True)
+    if load_embeds:
+        try:
+            allnodesembeddingpath = '/home/thummala/graphsage-pytorch/res/pubmed/gcn2020planetoid/allnodeembeddings.npy'
+            feat_data = np.load(allnodesembeddingpath)
+            print('loading gs embeddings as node features ', feat_data.shape)
+            print('loading from ',allnodesembeddingpath)
+        except:
+            print("Unable to load emmbeddings...working with input feature data")
     if teleport_khop or augment_khop:
         print('creating lsh')
         lsh_cand_dic = return_lsh_candidates(np.array(feat_data), n_vectors=lsh_helper['n_vectors'],
@@ -552,8 +610,8 @@ def custom_load_pubmed(lsh_helper, random_walk=False, root_folder='/home/thummal
     for i in range(num_nodes):
         degrees.append(len(list(adj_lists[i])))
 
-    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_lists, 'train_mask': [],
-                       'test_mask': [], 'val_mask': [], 'distances': [],
+    data_loader_dic = {'feat_data': feat_data, 'labels': labels, 'adj_lists': adj_lists, 'train_mask': train_mask,
+                       'test_mask': test_mask, 'val_mask': val_mask, 'distances': [],
                        'cluster_labels': [], 'freq': {}, 'dist_in_graph': {},
                        'centralityev': [], 'centralitybtw': [], 'centralityh': [],
                        'centralityd': degrees, 'lsh_neighbour_list': lsh_neighbourlist_dic}
@@ -563,7 +621,7 @@ def custom_load_pubmed(lsh_helper, random_walk=False, root_folder='/home/thummal
 
 ## Loader for ppi
 def load_ppi(lsh_helper, random_walk=False, root_folder='/home/thummala/graph-datasets/Dataset-PPI/ppi',
-             teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2):
+             teleport_khop=False, augment_khop=False, dfactor=2, use_centroid=False, teleport=0.2, load_embeds = False):
     # function to format neighbours in random walk dic stored as string
     print("Loading PPI Dataset", "random_walk", random_walk)
 
@@ -626,6 +684,9 @@ def load_ppi(lsh_helper, random_walk=False, root_folder='/home/thummala/graph-da
         temp[int(key)] = label_map[key]
     labels = np.array(temp)
     feat_data = np.load(root_folder + '/ppi-feats.npy')
+    if load_embeds:
+        feat_data = np.load('/home/thummala/graphsage-pytorch/res/ppi/gswithembeds/allnodeembeddings.npy')
+        print('loading gs embeddings as node features ', feat_data.shape)
     nodedf = pd.read_csv(root_folder + '/node_info.csv')
 
     if use_centroid:
