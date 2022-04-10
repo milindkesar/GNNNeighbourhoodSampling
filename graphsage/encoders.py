@@ -3,6 +3,20 @@ import torch.nn as nn
 from torch.nn import init
 import torch.nn.functional as F
 
+## Custom Class for Dropout
+class TrueDropout(torch.nn.Module):
+
+    def __init__(self, p: float = 0.5):
+        super(TrueDropout, self).__init__()
+        self.p = p
+        if self.p < 0 or self.p > 1:
+            raise ValueError("p must be a probability")
+
+    def forward(self, x):
+        if self.training:
+            x = x.mul(torch.empty(x.size()[1]).uniform_(0, 1) >= self.p) * (1 / (1 - self.p))
+        return x.t()
+
 class Encoder(nn.Module):
     """
     Encodes a node's using 'convolutional' GraphSage approach
@@ -11,7 +25,7 @@ class Encoder(nn.Module):
             embed_dim, adj_lists, aggregator,
             num_sample=10,
             base_model=None, gcn=False, cuda=False,feature_labels=None,distance=None,
-            feature_transform=False, lsh_neighbours = None, n_lsh_neighbours = None, lsh_augment=False):
+            feature_transform=False, lsh_neighbours = None, n_lsh_neighbours = None, lsh_augment=False, dropout = 0):
         super(Encoder, self).__init__()
         self.feature_labels=feature_labels
         self.distance=distance
@@ -32,6 +46,11 @@ class Encoder(nn.Module):
         self.aggregator.cuda = cuda
         self.weight = nn.Parameter(
                 torch.FloatTensor(embed_dim, self.feat_dim if self.gcn else 2 * self.feat_dim))
+        if dropout > 0:
+            print("Using Dropout = ",dropout)
+            self.dropout = TrueDropout(dropout)
+        else:
+            self.dropout = None
         init.xavier_uniform(self.weight)
 
     def forward(self, nodes):
@@ -57,7 +76,11 @@ class Encoder(nn.Module):
         else:
             combined = neigh_feats
         #print("shape combinded before:", combined.t().shape)
-        combined = F.relu(self.weight.mm(combined.t()))
+        ## Added dropout (no dropout in else (original))
+        if self.dropout !=None:
+            combined = F.relu(self.dropout(self.weight.mm(combined.t()).t()))
+        else:
+            combined = F.relu(self.weight.mm(combined.t()))
 
         return combined
 
@@ -71,7 +94,7 @@ class LSHNeighboursEncoder(nn.Module):
     def __init__(self, features, feature_dim,
             embed_dim, adj_lists, aggregator,lsh_aggregator,
             num_sample=10,
-            base_model=None, gcn=False, cuda=False, lsh_neighbours = None, n_lsh_neighbours = 5, lsh_augment=False):
+            base_model=None, gcn=False, cuda=False, lsh_neighbours = None, n_lsh_neighbours = 5, lsh_augment=False, dropout = 0):
         super(LSHNeighboursEncoder, self).__init__()
         self.features = features
         self.feat_dim = feature_dim
@@ -88,6 +111,11 @@ class LSHNeighboursEncoder(nn.Module):
         self.embed_dim = embed_dim
         self.cuda = cuda
         self.aggregator.cuda = cuda
+        if dropout > 0:
+            print("Using Dropout = ",dropout)
+            self.dropout = TrueDropout(dropout)
+        else:
+            self.dropout = None
         if self.lsh_augment:
             self.weight = nn.Parameter(torch.FloatTensor(embed_dim, self.feat_dim if self.gcn else 3 * self.feat_dim))
             if self.gcn:
@@ -123,7 +151,11 @@ class LSHNeighboursEncoder(nn.Module):
                 combined = torch.cat([self_feats, neigh_feats, lsh_neigh_feats], dim=1)
             else:
                 combined = torch.cat([self_feats, neigh_feats], dim=1)
-            combined = F.relu(self.weight.mm(combined.t()))
+            #combined = F.relu(self.weight.mm(combined.t()))
+            if self.dropout != None:
+                combined = F.relu(self.dropout(self.weight.mm(combined.t()).t()))
+            else:
+                combined = F.relu(self.weight.mm(combined.t()))
         else:
             ## GCN formulation (if LSH augment take two matrices as discussed)
             if self.lsh_augment:

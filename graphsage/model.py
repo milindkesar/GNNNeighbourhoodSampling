@@ -227,7 +227,7 @@ def evaluate(model,test,out_dir,labels,epoch,classification):
         out.write(json.dumps(results)+'\n')
 
 ### Helper function to run the model for a given dataset
-def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = None, augment_khop=False, includeNeighbourhood = False, gcn = False, load_embeds=False, planetoid = False):
+def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,attention='normal',aggregator='mean',n_layers=1,random_iter=1,lr=0.01,includenodefeats="no", type_of_walk = 'default', p=1,q=1,num_walks=10,walk_length=10,teleport=0.2, teleport_khop=False, dfactor=2, save_predictions = False, n_vectors = 16, search_radius = 2, atleast = False, num_lsh_neigbours=10, n_lsh_neighbours_sample = None, augment_khop=False, includeNeighbourhood = False, gcn = False, load_embeds=False, planetoid = False, embed_dim = 128, dropout = 0):
     for k in range(random_iter):
         if gcn:
             print("Using gcn formulation")
@@ -281,7 +281,7 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
             unique_labels=np.unique(data_dic['labels'])
             n_classes = len(unique_labels)
         epochs=epochs
-
+        print("embedding dimension is :",embed_dim)
         print("aggregator is :",aggregator)
         print("using softmax attention :",attention)
 
@@ -292,19 +292,19 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         if aggregator == 'mean':
             #agg1 = MeanAggregator(features, cuda=False, feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], gcn=gcn)
             agg1 = PureMeanAggregator(features, cuda=False, gcn=gcn)
-            enc1 = Encoder(features, num_feats, 128, data_dic['adj_lists'], agg1, gcn=gcn, cuda=False,
+            enc1 = Encoder(features, num_feats, embed_dim, data_dic['adj_lists'], agg1, gcn=gcn, cuda=False,
                            feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], num_sample=n1,
                            lsh_neighbours=data_dic['lsh_neighbour_list'], n_lsh_neighbours=n_lsh_neighbours,
-                           lsh_augment=augment_khop)
+                           lsh_augment=augment_khop, dropout=dropout)
             if n_layers > 1:
                 # agg2 = MeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False,
                 #                      feature_labels=data_dic['cluster_labels'], distance=data_dic['distances'], gcn=gcn)
                 agg2 = PureMeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False, gcn=gcn)
-                enc2 = Encoder(lambda nodes: enc1(nodes).t(), enc1.embed_dim, 128, data_dic['adj_lists'], agg2,
+                enc2 = Encoder(lambda nodes: enc1(nodes).t(), enc1.embed_dim, embed_dim, data_dic['adj_lists'], agg2,
                                base_model=enc1, gcn=gcn, cuda=False, feature_labels=data_dic['cluster_labels'],
                                distance=data_dic['distances'], num_sample=n2,
                                lsh_neighbours=data_dic['lsh_neighbour_list'], n_lsh_neighbours=n_lsh_neighbours,
-                               lsh_augment=augment_khop)
+                               lsh_augment=augment_khop, dropout=dropout)
                 graphsage = SupervisedGraphSage(n_classes, enc2)
             else:
                 graphsage = SupervisedGraphSage(n_classes, enc1)
@@ -313,11 +313,11 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
         elif aggregator == 'lsh_mean':
             agg1 = PureMeanAggregator(features, cuda=False, gcn = gcn)
             lsh_agg1 = PureMeanAggregator(features, cuda=False, gcn=gcn)
-            enc1= LSHNeighboursEncoder(features=features, feature_dim=num_feats, embed_dim=128, adj_lists=data_dic['adj_lists'], aggregator=agg1,lsh_aggregator=lsh_agg1, num_sample=n1, gcn=gcn, cuda=False, lsh_neighbours = data_dic['lsh_neighbour_list'], n_lsh_neighbours = n_lsh_neighbours, lsh_augment=augment_khop)
+            enc1= LSHNeighboursEncoder(features=features, feature_dim=num_feats, embed_dim=embed_dim, adj_lists=data_dic['adj_lists'], aggregator=agg1,lsh_aggregator=lsh_agg1, num_sample=n1, gcn=gcn, cuda=False, lsh_neighbours = data_dic['lsh_neighbour_list'], n_lsh_neighbours = n_lsh_neighbours, lsh_augment=augment_khop)
             if n_layers > 1:
                 agg2 = PureMeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False, gcn=gcn)
                 lsh_agg2 = PureMeanAggregator(lambda nodes: enc1(nodes).t(), cuda=False, gcn=gcn)
-                enc2 = LSHNeighboursEncoder(lambda nodes: enc1(nodes).t(), feature_dim=enc1.embed_dim, embed_dim=128,
+                enc2 = LSHNeighboursEncoder(lambda nodes: enc1(nodes).t(), feature_dim=enc1.embed_dim, embed_dim=embed_dim,
                                             adj_lists=data_dic['adj_lists'], aggregator=agg2, lsh_aggregator=lsh_agg2,
                                             num_sample=n2, gcn=gcn, cuda=False,
                                             lsh_neighbours=data_dic['lsh_neighbour_list'],
@@ -426,8 +426,8 @@ def run_general(name,outdir,rw=False,neighbours1=20,neighbours2=20,epochs=100,at
                 with open(out_dir+'/training_info.txt', 'a+') as convert_file:
                     convert_file.write(json.dumps(temp)+'\n')
                 print(epoch, " training loss: " +str(sum(training_loss_epoch)/len(training_loss_epoch)) + "  Validation Loss: "+str(val_loss.data))
-            ## Every 50 epochs or the final epoch, write the test loss to file.
-            if epoch%50 == 0 or epoch == epochs-1:
+            ## Every 25 epochs or the final epoch, write the test loss to file.
+            if epoch%25 == 0 or epoch == epochs-1:
                 evaluate(graphsage,test, out_dir,labels,epoch,classification)
 
     ## Helper code to write save the predictions and embeddings for qualitative analysis
